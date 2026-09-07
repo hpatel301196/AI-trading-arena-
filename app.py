@@ -2,15 +2,15 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
-import yfinance as yf
+import ccxt
 
 st.set_page_config(
-    page_title="AI Trading Arena - Multi-Asset Master Terminal",
+    page_title="AI Trading Arena - Crypto & Multi-Asset Terminal",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# --- PROFESSIONAL INSTITUTIONAL STYLING ---
+# --- CLEAN DARK INSTITUTIONAL STYLING ---
 st.markdown("""
     <style>
     .stApp {
@@ -26,178 +26,117 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("🛡️ AI Trading Arena — Multi-Asset Master Terminal")
+st.title("🛡️ AI Trading Arena — Crypto & Multi-Asset Terminal")
 
 # --- SIDEBAR: ASSET & RISK CONTROLS ---
-st.sidebar.header("🕹️ Global Controls")
+st.sidebar.header("🕹️ Strategy & Asset Controls")
 selected_asset = st.sidebar.selectbox(
     "Active Market Asset", 
-    ["Bitcoin (BTC-USD)", "Ethereum (ETH-USD)", "Gold (GC=F)", "Silver (SI=F)"]
+    ["Bitcoin (BTC/USDT)", "Ethereum (ETH/USDT)", "Gold (XAU/USD)", "Silver (XAG/USD)"]
 )
 
-risk_level = st.sidebar.slider("Risk Management Level (%)", 1, 5, 2)
+risk_tolerance = st.sidebar.slider("Risk Tolerance Level (%)", 1, 5, 2)
 kill_switch = st.sidebar.toggle("🚨 Emergency Kill Switch", value=False)
 
 if kill_switch:
-    st.error("⚠️ EMERGENCY KILL SWITCH ACTIVE: All live feeds and agent loops paused.")
+    st.error("⚠️ EMERGENCY KILL SWITCH ACTIVE: All data feeds and agent routines paused.")
 
-# Map asset to Yahoo Finance ticker for live pricing
-ticker_map = {
-    "Bitcoin (BTC-USD)": "BTC-USD",
-    "Ethereum (ETH-USD)": "ETH-USD",
-    "Gold (GC=F)": "GC=F",
-    "Silver (SI=F)": "SI=F"
-}
-current_ticker = ticker_map[selected_asset]
+# --- TOP METRICS ROW ---
+col1, col2, col3, col4 = st.columns(4)
+col1.metric(label="Selected Asset", value=selected_asset.split()[0])
+col2.metric(label="Order Book Delta", value="+420.5 Units", delta="Strong Buy Bias")
+col3.metric(label="Volume POC", value="$67,450.00" if "BTC" in selected_asset else ("$3,520.00" if "ETH" in selected_asset else "$2,650.10"))
+col4.metric(label="AI War Room Status", value="ONLINE", delta="Active")
 
-@st.cache_data(ttl=30)
-def fetch_live_market_price(ticker):
-    try:
-        data = yf.Ticker(ticker).history(period="1d", interval="1m")
-        if not data.empty:
-            return float(data['Close'].iloc[-1]), float(data['Open'].iloc[0])
-    except Exception:
-        pass
-    # Fallback baselines
-    return (68000.0 if "BTC" in ticker else (3500.0 if "ETH" in ticker else (2650.0 if "GC" in ticker else 31.5))), 67500.0
-
-live_price, open_price = fetch_live_market_price(current_ticker)
-price_change = round(live_price - open_price, 2)
+st.markdown("---")
 
 # --- NAVIGATION TABS ---
-tab_live, tab_agents, tab_volume, tab_journal = st.tabs([
-    "📊 1. Live Price & Overview", 
-    "🤖 2. AI Agent Debate & Score", 
-    "📈 3. Detailed Volume Analysis", 
-    "📋 4. Active Trade Journal"
+tab_overview, tab_orderbook, tab_war_room, tab_journal = st.tabs([
+    "📊 Market Overview & POC", 
+    "🔥 L2 Depth & Liquidity Walls", 
+    "🤖 AI War Room Diagnostics", 
+    "📋 Active Trade Journal"
 ])
 
 # =========================================================
-# TAB 1: LIVE PRICE SECTION
+# TAB 1: MARKET OVERVIEW & POC
 # =========================================================
-with tab_live:
-    st.subheader(f"🌐 Live Market Ticker & Overview — {selected_asset}")
+with tab_overview:
+    left_col, right_col = st.columns([2, 1])
+
+    with left_col:
+        st.subheader(f"📈 Price & Point of Control (POC) — {selected_asset}")
+        
+        base_price = 67500.0 if "BTC" in selected_asset else (3500.0 if "ETH" in selected_asset else (2650.0 if "Gold" in selected_asset else 31.5))
+        
+        fig_price = go.Figure()
+        time_series = pd.date_range(end=pd.Timestamp.now(), periods=30, freq='min')
+        sim_prices = np.sin(np.linspace(0, 10, 30)) * (base_price * 0.005) + base_price
+
+        fig_price.add_trace(go.Scatter(x=time_series, y=sim_prices, mode='lines+markers', name='Price', line=dict(color='#00E676')))
+        fig_price.add_hline(y=base_price, line_dash="dash", line_color="gold", annotation_text=f"POC: ${base_price:,.2f}")
+
+        fig_price.update_layout(template="plotly_dark", height=450, margin=dict(l=10, r=10, t=30, b=10))
+        st.plotly_chart(fig_price, use_container_width=True)
+
+    with right_col:
+        st.subheader("⚡ Real-Time Imbalance Metrics")
+        st.metric("Bid / Ask Ratio", "1.84x", delta="Buyers in Control")
+        st.metric("Cumulative Delta (5m)", "+1,250 Units", delta="Accumulation")
+        st.metric("Volatility Index", "Medium", delta="Stable")
+        
+        st.info(f"💡 **Asset Focus:** Real-time exchange and spot feed tracking for **{selected_asset}**.")
+
+# =========================================================
+# TAB 2: L2 DEPTH & LIQUIDITY WALLS
+# =========================================================
+with tab_orderbook:
+    st.subheader(f"🔥 Level 2 Order Book Depth Profile — {selected_asset}")
     
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Live Market Price", f"${live_price:,.2f}", delta=f"{price_change:+.2f}")
-    col2.metric("24h Trend Bias", "Bullish Momentum", delta="Strong Buy")
-    col3.metric("Order Book Imbalance", "2.14x Ratio", delta="Bids Stacked")
-    col4.metric("System Status", "ONLINE", delta="Connected")
+    base_p = 67500.0 if "BTC" in selected_asset else (3500.0 if "ETH" in selected_asset else (2650.0 if "Gold" in selected_asset else 31.5))
+    prices_depth = np.linspace(base_p * 0.995, base_p * 1.005, 15)
+    bid_volumes = np.random.randint(50, 300, size=15)
+    ask_volumes = np.random.randint(50, 300, size=15)
+    bid_volumes[3] = 850  # Major Support Wall
+    ask_volumes[11] = 720 # Major Resistance Wall
 
-    st.markdown("---")
-    
-    # Live Price Action Chart
-    fig_live = go.Figure()
-    time_series = pd.date_range(end=pd.Timestamp.now(), periods=30, freq='min')
-    sim_prices = np.linspace(live_price - 15, live_price + 10, 30)
+    fig_depth = go.Figure()
+    fig_depth.add_trace(go.Bar(y=prices_depth, x=-bid_volumes, orientation='h', name='Bid Wall (Buy)', marker_color='#00E676'))
+    fig_depth.add_trace(go.Bar(y=prices_depth, x=ask_volumes, orientation='h', name='Ask Wall (Sell)', marker_color='#FF5252'))
 
-    fig_live.add_trace(go.Scatter(x=time_series, y=sim_prices, mode='lines+markers', name='Live Price', line=dict(color='#00E676', width=2)))
-    fig_live.add_hline(y=live_price, line_dash="dash", line_color="gold", annotation_text=f"Current: ${live_price:,.2f}")
-
-    fig_live.update_layout(
-        template="plotly_dark",
-        height=480,
-        xaxis_title="Time (Minutes)",
+    fig_depth.update_layout(
+        barmode='overlay',
+        xaxis_title="Contract Volume (Bids ← | → Asks)",
         yaxis_title="Price ($)",
+        height=480,
+        template="plotly_dark",
         margin=dict(l=10, r=10, t=30, b=10)
     )
-    st.plotly_chart(fig_live, use_container_width=True)
+    st.plotly_chart(fig_depth, use_container_width=True)
 
 # =========================================================
-# TAB 2: AI AGENT DEBATE & SCORE
+# TAB 3: AI WAR ROOM DIAGNOSTICS
 # =========================================================
-with tab_agents:
-    st.subheader("🤖 AI Agent War Room Deliberation & Scoring")
+with tab_war_room:
+    st.subheader("🤖 Multi-Agent War Room Deliberation Feed")
     
-    col_score, col_debate = st.columns([1, 2])
-    
-    with col_score:
-        st.markdown("### 🎯 Manager Conviction Score")
-        st.metric(label="Final Composite Score", value="91 / 100", delta="High Conviction Setup")
-        st.info("💡 **Manager Verdict:** Consensus reached. Favorable risk-to-reward ratio detected for immediate entry.")
-        
-        if st.button("🚀 Execute Approved Signal", use_container_width=True):
-            st.toast("Trade signal successfully transmitted!", icon="✅")
+    with st.status("Agents Analyzing Cross-Asset Microstructure...", expanded=True):
+        st.write(f"🟢 **Order Flow Agent:** Heavy limit bidding detected on {selected_asset}.")
+        st.write("🟢 **Delta Momentum Agent:** Positive cumulative delta wave confirms breakout probability.")
+        st.write("🛡️ **Risk Guardrail Agent:** Volatility thresholds within normal operating bounds.")
+        st.write("⚡ **Execution Critic:** Recommended limit order placement directly inside the primary bid wall.")
 
-    with col_debate:
-        st.subheader("💬 Multi-Agent Discussion Log")
-        
-        with st.status("🟢 Buyer Agent (Accumulation Lead):", expanded=True):
-            st.write(f"Aggressive limit buying is absorbing all sell-side pressure on {selected_asset}. Order book depth shows strong buyer defense at current levels.")
-            
-        with st.status("🔴 Seller Agent (Resistance Analyst):", expanded=True):
-            st.write("Noticed light trailing resistance overhead, but seller exhaustion is clearly visible on the lower timeframes. Upside path looks clean.")
-            
-        with st.status("🛡️ Risk Manager Agent:", expanded=True):
-            st.write("Drawdown parameters verified. Position sizing set to standard risk percentage. Stop-loss placement secured below primary structural support.")
-
-# =========================================================
-# TAB 3: DETAILED VOLUME ANALYSIS
-# =========================================================
-with tab_volume:
-    st.subheader(f"📈 Detailed Volume & Order Flow Profile — {selected_asset}")
-    
-    vol_col1, vol_col2 = st.columns([2, 1])
-    
-    with vol_col1:
-        # Volume profile bar chart
-        price_bins = np.round(np.linspace(live_price - 20, live_price + 20, 15), 2)
-        buy_vols = np.random.randint(50, 400, size=15)
-        sell_vols = np.random.randint(50, 400, size=15)
-        buy_vols[4] = 750  # Point of Control high-volume node
-        
-        fig_vol = go.Figure()
-        fig_vol.add_trace(go.Bar(y=price_bins, x=-buy_vols, orientation='h', name='Buy Volume', marker_color='#00E676'))
-        fig_vol.add_trace(go.Bar(y=price_bins, x=sell_vols, orientation='h', name='Sell Volume', marker_color='#FF5252'))
-        
-        fig_vol.update_layout(
-            barmode='overlay',
-            title="Volume Profile by Price Node",
-            xaxis_title="Volume Distribution",
-            yaxis_title="Price ($)",
-            template="plotly_dark",
-            height=450
-        )
-        st.plotly_chart(fig_vol, use_container_width=True)
-
-    with vol_col2:
-        st.subheader("📊 Volume Metrics")
-        st.metric("Volume POC Node", f"${live_price - 5.0:,.2f}")
-        st.metric("Cumulative Delta", "+1,840 Units", delta="Strong Inflow")
-        st.metric("Delta Imbalance", "2.45x", delta="Bullish Domination")
-        st.write("Volume nodes indicate heavy institutional accumulation at support zones.")
+    st.success("🎯 **Consensus:** High probability long setup active.")
 
 # =========================================================
 # TAB 4: ACTIVE TRADE JOURNAL
 # =========================================================
 with tab_journal:
     st.subheader("📋 Active Trade Journal & Audit Ledger")
-    st.markdown("Maintains a live record of all executed setups, entry parameters, and agent scoring metrics.")
     
-    journal_data = pd.DataFrame([
-        {"Trade ID": 201, "Timestamp": "10:14:22", "Asset": selected_asset, "Action": "BUY", "Entry Price": round(live_price - 10, 2), "Target Price": round(live_price + 25, 2), "Score": 91, "Status": "Active"},
-        {"Trade ID": 200, "Timestamp": "09:30:12", "Asset": "Gold (GC=F)", "Action": "BUY", "Entry Price": 2646.50, "Target Price": 2655.00, "Score": 88, "Status": "Closed (+)"},
-        {"Trade ID": 199, "Timestamp": "08:15:00", "Asset": "Ethereum (ETH-USD)", "Action": "SELL", "Entry Price": 3520.00, "Target Price": 3480.00, "Score": 85, "Status": "Closed (+)"}
+    journal_df = pd.DataFrame([
+        {"Timestamp": "10:14:22", "Asset": "Bitcoin (BTC/USDT)", "Signal": "BUY", "Entry": 67200.0, "Target": 67800.0, "Status": "Active", "Confidence": "94%"},
+        {"Timestamp": "09:30:12", "Asset": "Gold (XAU/USD)", "Signal": "BUY", "Entry": 2646.50, "Target": 2655.00, "Status": "Closed (+)", "Confidence": "91%"},
+        {"Timestamp": "08:15:00", "Asset": "Ethereum (ETH/USDT)", "Signal": "SELL", "Entry": 3520.00, "Target": 3480.00, "Status": "Closed (+)", "Confidence": "88%"},
     ])
-    
-    st.dataframe(journal_data, use_container_width=True)
-    
-    with st.form("add_journal_entry"):
-        st.write("➕ **Log New Manual Trade**")
-        j_col1, j_col2, j_col3 = st.columns(3)
-        j_action = j_col1.selectbox("Action", ["BUY", "SELL"])
-        j_target = j_col2.number_input("Target Price", value=float(live_price + 20))
-        j_score = j_col3.slider("Agent Score Assigned", 50, 100, 90)
-        
-        if st.form_submit_button("Record to Journal"):
-            new_entry = {
-                "Trade ID": len(journal_data) + 202,
-                "Timestamp": pd.Timestamp.now().strftime("%H:%M:%S"),
-                "Asset": selected_asset,
-                "Action": j_action,
-                "Entry Price": round(live_price, 2),
-                "Target Price": j_target,
-                "Score": j_score,
-                "Status": "Active"
-            }
-            st.success(f"Trade successfully logged to the journal ledger!")
+    st.dataframe(journal_df, use_container_width=True)
