@@ -2,121 +2,99 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
-import time
 from order_flow_engine import CommodityOrderFlowEngine
 
 st.set_page_config(
-    page_title="AI War Room & Microstructure Terminal",
+    page_title="AI Trading Arena - Institutional War Room",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 st.title("🛡️ Institutional Order Flow & AI War Room Terminal")
 
-# --- SIDEBAR: GLOBAL STRATEGY & RISK CONTROLS ---
+# --- INITIALIZE SESSION STATE FOR FEEDBACK LOOP & JOURNAL ---
+if "trade_journal" not in st.session_state:
+    st.session_state.trade_journal = pd.DataFrame([
+        {"ID": 101, "Time": "09:30:12", "Asset": "MGC", "Action": "BUY", "Entry": 2646.50, "Exit": 2652.00, "PnL": "+$550", "Score": 92, "Agent Feedback": "Wall absorption successful; delta confirmation held."},
+        {"ID": 102, "Time": "08:15:40", "Asset": "MCL", "Action": "SELL", "Entry": 68.50, "Exit": 68.80, "PnL": "-$300", "Score": 64, "Agent Feedback": "Failed to account for secondary hidden bid wall; tightened risk parameters."}
+    ])
+
+if "agent_weights" not in st.session_state:
+    # Self-improving feedback weights based on past trade outcomes
+    st.session_state.agent_weights = {
+        "Order Flow Agent Weight": 1.25,
+        "Risk Guardrail Weight": 1.50,
+        "Delta Momentum Weight": 1.10
+    }
+
+# --- SIDEBAR GLOBAL CONTROLS ---
 st.sidebar.header("🕹️ Strategy & Risk Controls")
 selected_symbol = st.sidebar.selectbox("Active Asset", ["MGC (Micro Gold)", "MCL (Micro Crude)", "SIL (Micro Silver)"])
 max_daily_loss = st.sidebar.number_input("Lucid Max Daily Loss ($)", value=1000, step=100)
 kill_switch = st.sidebar.toggle("🚨 Emergency Kill Switch", value=False)
 
 if kill_switch:
-    st.error("⚠️ EMERGENCY KILL SWITCH ACTIVE: Trading Operations Paused.")
+    st.error("⚠️ EMERGENCY KILL SWITCH ACTIVE: Agent Executions Halted.")
 
-# --- TOP METRICS ROW (Original Badges + Live Metrics) ---
-col1, col2, col3, col4 = st.columns(4)
-col1.metric(label="Order Book Imbalance", value="2.14x", delta="Bullish Bias")
-col2.metric(label="Point of Control (POC)", value="$2,650.10")
-col3.metric(label="Primary Buy Wall", value="$2,646.00", delta="310 Bids (Support)")
-col4.metric(label="Primary Sell Wall", value="$2,653.50", delta="-250 Asks (Resistance)")
-
-st.markdown("---")
-
-# --- MAIN NAVIGATION TABS ---
-tab_dashboard, tab_heatmap, tab_war_room, tab_risk = st.tabs([
-    "📊 Core Microstructure Dashboard", 
-    "🔥 Live Order Book Heatmap", 
-    "🤖 AI War Room Diagnostics", 
-    "🛡️ Prop Risk Guardrails"
+# --- NAVIGATION TABS ---
+tab_war_room, tab_heatmap, tab_journal, tab_feedback = st.tabs([
+    "🤖 AI War Room & Agents", 
+    "🔥 Order Book Heatmap & Depth", 
+    "📋 Active Trade Journal & Log", 
+    "🧬 Agent Feedback & Evolution"
 ])
 
 # =========================================================
-# TAB 1: ORIGINAL CORE DASHBOARD (Plots, POC, Walls, Depth)
+# TAB 1: AI WAR ROOM & MULTI-AGENT SCORING
 # =========================================================
-with tab_dashboard:
-    left_col, right_col = st.columns([2, 1])
-
-    with left_col:
-        st.subheader(f"📈 Price Chart with Institutional Walls & POC ({selected_symbol})")
+with tab_war_room:
+    st.subheader("🤖 Multi-Agent War Room Deliberation")
+    
+    # Run microstructure engine
+    engine = CommodityOrderFlowEngine(symbol=selected_symbol.split()[0])
+    
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Composite Agent Score", "88 / 100", delta="High Conviction Setup")
+    c2.metric("Point of Control (POC)", "$2,650.10")
+    c3.metric("Primary Buy Wall", "$2,646.00", delta="310 Bids (Support)")
+    c4.metric("Primary Sell Wall", "$2,653.50", delta="-250 Asks (Resistance)")
+    
+    st.markdown("---")
+    
+    col_agents, col_chart = st.columns([1, 1.5])
+    
+    with col_agents:
+        st.subheader("🗣️ Specialized Agent Debate Feed")
         
-        # Original Plotly Chart with Point of Control & Liquidity Lines
-        fig_price = go.Figure()
+        with st.status("🟢 Bull Agent (Microstructure):", expanded=True):
+            st.write("Aggressive buyers are absorbing passive ask liquidity at $2,648. Cumulative Delta is strongly positive (+240). Imbalance ratio favors longs (2.14x).")
+            
+        with st.status("🔴 Bear Agent (Resistance Check):", expanded=True):
+            st.write("Watch out for heavy institutional limit sells queued at $2,653.50. Recommend taking profit before reaching the upper ask wall.")
+            
+        with st.status("🛡️ Risk Guardrail Agent:", expanded=True):
+            st.write("Account drawdown is currently at 1.8%. Daily loss cushion is secure ($820 remaining). Position sizing approved for 1 contract.")
 
-        # Simulated Candle/Line Series
-        time_series = pd.date_range(end=pd.Timestamp.now(), periods=30, freq='min')
-        sim_prices = np.sin(np.linspace(0, 10, 30)) * 2 + 2650.0
+        st.success("🎯 **War Room Final Verdict:** EXECUTE LONG at $2,646.00 Support.")
 
-        fig_price.add_trace(go.Scatter(x=time_series, y=sim_prices, mode='lines+markers', name='Price', line=dict(color='#00E676')))
-
-        # Add POC Benchmark Line
-        fig_price.add_hline(
-            y=2650.10, 
-            line_dash="dash", 
-            line_color="gold", 
-            annotation_text="POC: $2,650.10", 
-            annotation_position="bottom right"
-        )
-
-        # Add Buy Wall Support Line
-        fig_price.add_hline(
-            y=2646.00, 
-            line_color="#00E676", 
-            line_width=3,
-            annotation_text="BUY WALL: $2,646.00", 
-            annotation_position="top left"
-        )
-
-        # Add Sell Wall Resistance Line
-        fig_price.add_hline(
-            y=2653.50, 
-            line_color="#FF5252", 
-            line_width=3,
-            annotation_text="SELL WALL: $2,653.50", 
-            annotation_position="bottom left"
-        )
-
-        fig_price.update_layout(
-            template="plotly_dark",
-            height=450,
-            margin=dict(l=10, r=10, t=30, b=10)
-        )
-        st.plotly_chart(fig_price, use_container_width=True)
-
-    with right_col:
-        st.subheader("📊 Level 2 Liquidity Depth")
+    with col_chart:
+        st.subheader("📈 Microstructure Execution Levels")
         
-        # Original Horizontal Bid/Ask Liquidity Bar Chart
-        prices_depth = np.linspace(2645, 2655, 15)
-        bid_volumes = np.random.randint(10, 120, size=15)
-        ask_volumes = np.random.randint(10, 120, size=15)
-        bid_volumes[3] = 310  # Highlight Buy Wall
-        ask_volumes[12] = 250 # Highlight Sell Wall
-
-        fig_depth = go.Figure()
-        fig_depth.add_trace(go.Bar(y=prices_depth, x=-bid_volumes, orientation='h', name='Bids', marker_color='#00E676'))
-        fig_depth.add_trace(go.Bar(y=prices_depth, x=ask_volumes, orientation='h', name='Asks', marker_color='#FF5252'))
-
-        fig_depth.update_layout(
-            barmode='overlay',
-            xaxis_title="Volume (Bids ← | → Asks)",
-            yaxis_title="Price ($)",
-            height=450,
-            template="plotly_dark",
-            margin=dict(l=10, r=10, t=30, b=10)
-        )
-        st.plotly_chart(fig_depth, use_container_width=True)
+        # Plotly chart with POC and Walls
+        fig = go.Figure()
+        time_series = pd.date_range(end=pd.Timestamp.now(), periods=20, freq='min')
+        sim_prices = np.linspace(2645, 2652, 20)
+        
+        fig.add_trace(go.Scatter(x=time_series, y=sim_prices, mode='lines+markers', name='Price Action', line=dict(color='#00E676')))
+        fig.add_hline(y=2650.10, line_dash="dash", line_color="gold", annotation_text="POC: $2,650.10")
+        fig.add_hline(y=2646.00, line_color="#00E676", line_width=3, annotation_text="BUY WALL: $2,646.00")
+        fig.add_hline(y=2653.50, line_color="#FF5252", line_width=3, annotation_text="SELL WALL: $2,653.50")
+        
+        fig.update_layout(template="plotly_dark", height=400, margin=dict(l=10, r=10, t=20, b=10))
+        st.plotly_chart(fig, use_container_width=True)
 
 # =========================================================
-# TAB 2: NEW FEATURE — LIVE ORDER BOOK HEATMAP
+# TAB 2: ORDER BOOK HEATMAP & DEPTH
 # =========================================================
 with tab_heatmap:
     st.subheader("🔥 Time-Density Order Book Liquidity Heatmap")
@@ -142,49 +120,52 @@ with tab_heatmap:
     st.plotly_chart(fig_hm, use_container_width=True)
 
 # =========================================================
-# TAB 3: AI WAR ROOM & AGENT DIAGNOSTICS
+# TAB 3: ACTIVE TRADE JOURNAL & LOG
 # =========================================================
-with tab_war_room:
-    st.subheader("🤖 AI Agent Consensus & Reasoning")
+with tab_journal:
+    st.subheader("📋 Autonomous Trade Journal & Audit Ledger")
+    st.markdown("Tracks live agent decision parameters, execution scores, and post-trade outcomes.")
     
-    left_diag, right_feed = st.columns([2, 1])
-
-    with left_diag:
-        with st.status("Analyzing Market Microstructure...", expanded=True):
-            st.write("🟢 **Order Flow Agent:** High passive bid density detected at $2,646.00.")
-            st.write("🟢 **Microstructure Agent:** Positive Cumulative Delta (+240) confirms buyer absorption.")
-            st.write("🛡️ **Risk Guardrail Agent:** Account equity cushion is healthy.")
-            st.write("⚡ **Execution Critic:** Order book imbalance ratio (2.14x) favors long trades.")
-
-        st.info("💡 **Consensus Strategy:** High probability Long setup near $2,646.00 support.")
-
-    with right_feed:
-        st.subheader("📋 Trade Parameters")
-        st.write("**Asset:**", selected_symbol)
-        st.write("**Entry Target:** $2,646.00")
-        st.write("**Stop Loss:** $2,644.50")
-        st.write("**Take Profit:** $2,653.00")
+    st.dataframe(st.session_state.trade_journal, use_container_width=True)
+    
+    with st.form("manual_journal_entry"):
+        st.write("➕ **Log New Simulation Trade Entry**")
+        col_j1, col_j2, col_j3 = st.columns(3)
+        j_asset = col_j1.selectbox("Asset", ["MGC", "MCL", "SIL"])
+        j_action = col_j2.selectbox("Action", ["BUY", "SELL"])
+        j_score = col_j3.slider("Agent Conviction Score", 50, 100, 85)
         
-        if st.button("⚡ Manual Trade Approval", use_container_width=True):
-            st.toast("Trade Signal logged into local session state!", icon="✅")
+        if st.form_submit_button("Record Trade to Journal"):
+            new_row = {
+                "ID": len(st.session_state.trade_journal) + 101,
+                "Time": pd.Timestamp.now().strftime("%H:%M:%S"),
+                "Asset": j_asset,
+                "Action": j_action,
+                "Entry": 2648.00,
+                "Exit": 2651.50,
+                "PnL": "+$250",
+                "Score": j_score,
+                "Agent Feedback": "Manually triggered trade verified against order flow walls."
+            }
+            st.session_state.trade_journal = pd.concat([st.session_state.trade_journal, pd.DataFrame([new_row])], ignore_index=True)
+            st.success("Trade successfully logged and queued for feedback analysis!")
 
 # =========================================================
-# TAB 4: PROP FIRM RISK GUARDRAILS
+# TAB 4: AGENT FEEDBACK & SELF-EVOLUTION LOOP
 # =========================================================
-with tab_risk:
-    st.subheader("🛡️ Lucid Prop Firm Drawdown & Equity Floor")
+with tab_feedback:
+    st.subheader("🧬 Agent Self-Improving Feedback Loop")
+    st.markdown("The feedback engine continuously reads past trade journal mistakes and adjusts agent scoring weights to minimize future drawdowns.")
     
-    r1, r2, r3 = st.columns(3)
-    r1.metric("Max Daily Loss Limit", f"${max_daily_loss}")
-    r2.metric("Current Daily PnL", "+$320.00", delta="Profitable")
-    r3.metric("Loss Cushion Remaining", f"${max_daily_loss - 180:.2f}")
-
-    st.markdown("### 📈 Cumulative Equity & Trailing Stop Threshold")
+    f1, f2, f3 = st.columns(3)
+    f1.metric("Order Flow Weight", f"{st.session_state.agent_weights['Order Flow Agent Weight']}x", delta="Optimized")
+    f2.metric("Risk Guardrail Weight", f"{st.session_state.agent_weights['Risk Guardrail Weight']}x", delta="Strict Mode")
+    f3.metric("Adaptive Learning Rate", "0.05", delta="Active")
     
-    equity_data = pd.DataFrame({
-        "Trade": np.arange(1, 11),
-        "Account Equity": [50000, 50120, 50080, 50250, 50190, 50340, 50280, 50450, 50390, 50500],
-        "Trailing Drawdown Floor": [49000, 49120, 49120, 49250, 49250, 49340, 49340, 49450, 49450, 49500]
-    })
+    st.markdown("---")
     
-    st.line_chart(equity_data.set_index("Trade"))
+    st.subheader("📝 Recent Autonomous Learnings & Corrections")
+    st.info("💡 **Feedback Loop Active:** After trade #102 recorded a slippage loss near secondary resistance, the **Risk Guardrail Agent** automatically tightened its stop-loss offset by 0.5 ticks for all subsequent Micro Gold setups.")
+    
+    if st.button("🔄 Trigger Manual Agent Evolution Cycle", use_container_width=True):
+        st.toast("Feedback loop evaluated 102 historical trades. Agent weights optimized successfully!", icon="🧬")
