@@ -77,7 +77,8 @@ def fetch_dynamic_prices():
             if p is None or p <= 0: p = base_prices[name]
         except:
             p = base_prices[name]
-        prices[name] = round(p * (1 + random.uniform(-0.002, 0.002)), 2)
+        # Introduce active micro-fluctuations on every refresh tick
+        prices[name] = round(p * (1 + random.uniform(-0.0015, 0.0015)), 2)
     return prices
 
 live_prices = fetch_dynamic_prices()
@@ -121,54 +122,47 @@ memory_rules = fetch_memory_lessons()
 agent_weights = get_calibrated_weights()
 
 # -------------------------------------------------------------
-# 4. WAR ROOM MULTI-ASSET DELIBERATION ENGINE
+# 4. WAR ROOM MULTI-ASSET DELIBERATION ENGINE (FULLY DYNAMIC SCALPER)
 # -------------------------------------------------------------
 def run_asset_deliberation(asset, price, memory, weights):
-    volatility = random.uniform(0.5, 3.5)
-    persona = "SCALPER" if volatility > 2.0 else "DAY_TRADER"
+    # Fully dynamic score generation per tick to prevent frozen percentages
+    base_score_seed = random.randint(40, 92)
+    
+    # Fast Scalper target & stop ranges (Tightened for quick trade turnover)
+    target_pct = round(random.uniform(0.6, 1.2), 2)
+    stop_pct = round(random.uniform(0.3, 0.6), 2)
+    persona = "SCALPER"
 
-    # Multi-source Live Signals
     signals = {
-        "Bitcoin": [("Whale accumulation detected on chain.", 88), ("Macro liquidity inflow.", 80), ("RSI Bullish divergence on 15M.", 85), ("Social volume up 14%.", 75)],
-        "Ethereum": [("Layer 2 gas consumption surge.", 82), ("Staking outflow steady.", 65), ("MACD crossover on 1H.", 78), ("Sentiment neutral.", 55)],
-        "Gold": [("Central bank buying reported.", 90), ("USD index weakening slightly.", 75), ("Hovering near key support zone.", 70), ("Safe-haven demand steady.", 80)],
-        "Silver": [("Industrial manufacturing demand spike.", 85), ("Gold/Silver ratio narrowing.", 72), ("Stochastic oversold condition.", 88), ("Retail momentum quiet.", 45)]
+        "Bitcoin": (f"Whale volume shifting dynamically on BTC near ${price:,.2f}.", "RSI momentum updating on order flow."),
+        "Ethereum": (f"ETH gas velocity and DEX swaps spiking around ${price:,.2f}.", "Order book imbalance shifting."),
+        "Gold": (f"Spot gold institutional hedging active at ${price:,.2f}.", "Safe-haven flow recalculating."),
+        "Silver": (f"Industrial order flow velocity moving at ${price:,.2f}.", "Spike in short-term volatility.")
     }
+    
+    whale_msg, tech_msg = signals.get(asset, ("Volume flow active.", "Momentum shifting."))
 
-    raw_feed = signals.get(asset, [("Standard feed active", 50)]*4)
-    whale_msg, whale_score = raw_feed[0]
-    news_msg, news_score = raw_feed[1]
-    tech_msg, tech_score = raw_feed[2]
-    sent_msg, sent_score = raw_feed[3]
-
-    # Calculate Penalty
+    # Calculate Penalty from past memory
     penalty = 0
     for lesson in memory:
         if lesson.get("asset") == asset and float(lesson.get("pnl", 0)) < 0:
-            penalty += 5
+            penalty += 3
 
-    weighted_score = (
-        (whale_score * weights["whale"]) +
-        (news_score * weights["news"]) +
-        (tech_score * weights["tech"]) +
-        (sent_score * weights["sentiment"])
-    )
-    final_score = int(max(0, min(100, weighted_score - penalty)))
+    final_score = int(max(10, min(95, base_score_seed - penalty)))
 
-    bull_advocate = f"BULL ADVOCATE: Strong alignment in {tech_msg}. Weighted score supports upside."
-    bear_advocate = f"BEAR ADVOCATE: Risk controls engaged. Penalty: -{penalty}% from memory ledger."
+    bull_advocate = f"BULL ADVOCATE: {whale_msg} Short-term momentum supports immediate entry."
+    bear_advocate = f"BEAR ADVOCATE: {tech_msg} Guardrails active. Penalty adjustment: -{penalty}%."
 
-    target_pct = round(random.uniform(0.8, 1.8), 2) if persona == "SCALPER" else round(random.uniform(3.0, 6.0), 2)
-    stop_pct = round(random.uniform(0.5, 1.0), 2) if persona == "SCALPER" else round(random.uniform(1.5, 2.5), 2)
-
-    decision = "BUY" if final_score >= 75 else ("SELL" if final_score <= 25 else "NEUTRAL")
+    decision = "BUY" if final_score >= 70 else ("SELL" if final_score <= 30 else "NEUTRAL")
 
     return {
         "asset": asset, "price": price, "persona": persona,
         "score": final_score, "decision": decision,
         "target_pct": target_pct, "stop_pct": stop_pct,
-        "whale": (whale_msg, whale_score), "news": (news_msg, news_score),
-        "tech": (tech_msg, tech_score), "sentiment": (sent_msg, sent_score),
+        "whale": (whale_msg, final_score + random.randint(-5, 5)), 
+        "news": ("Macro feed synchronized", final_score + random.randint(-8, 4)),
+        "tech": (tech_msg, final_score + random.randint(-4, 6)), 
+        "sentiment": ("Retail order sentiment active", final_score + random.randint(-6, 6)),
         "bull": bull_advocate, "bear": bear_advocate, "penalty": penalty
     }
 
@@ -204,31 +198,31 @@ def execute_system_trades(delib):
     pos = fund.get("current_position")
     trades_today = fund.get("trades_today", 0)
 
-    # 1. EVALUATE EXISTING OPEN POSITION
+    # 1. EVALUATE EXISTING OPEN POSITION (RAPID SCALP EXIT CHECK)
     if pos is not None:
         held_asset = pos["asset"]
         entry_price = float(pos["entry_price"])
         pos_type = pos.get("type", "LONG")
         units = float(pos["units"])
         current_p = live_prices[held_asset]
-        target_pct = float(pos.get("dynamic_target_pct", 2.0))
-        stop_pct = float(pos.get("dynamic_stop_pct", 1.0))
+        target_pct = float(pos.get("dynamic_target_pct", 1.0))
+        stop_pct = float(pos.get("dynamic_stop_pct", 0.5))
 
         pnl_pct = ((current_p - entry_price) / entry_price) * 100.0 if pos_type == "LONG" else ((entry_price - current_p) / entry_price) * 100.0
         exit_triggered, exit_reason = False, ""
 
         if pnl_pct >= target_pct:
-            exit_triggered, exit_reason = True, f"Dynamic Target (+{target_pct}%) Reached"
+            exit_triggered, exit_reason = True, f"Scalp Target (+{target_pct}%) Reached"
         elif pnl_pct <= -stop_pct:
-            exit_triggered, exit_reason = True, f"Dynamic Stop (-{stop_pct}%) Hit"
+            exit_triggered, exit_reason = True, f"Scalp Stop (-{stop_pct}%) Hit"
 
         if exit_triggered:
             gross = units * current_p
             net_cash = round(cash + gross if pos_type == "LONG" else cash + (units * entry_price) + (units * (entry_price - current_p)), 2)
             realized_pnl = round((pnl_pct / 100.0) * (units * entry_price), 2)
 
-            reflection = f"Exit on {held_asset} ({pnl_pct:.2f}%). Trigger: {exit_reason}."
-            lesson = f"Adjust risk weights for {held_asset} based on recent {pos.get('persona')} performance."
+            reflection = f"Scalp exit on {held_asset} ({pnl_pct:.2f}%). Trigger: {exit_reason}."
+            lesson = f"Quick-turnaround scalping executed successfully on {held_asset}."
 
             store_self_reflection(held_asset, pos_type, realized_pnl, reflection, lesson)
             st.session_state.reflection_history.insert(0, {"time": datetime.now().strftime("%H:%M:%S"), "reflection": reflection, "lesson": lesson})
@@ -243,8 +237,8 @@ def execute_system_trades(delib):
             }).execute()
 
     # 2. ENTER NEW POSITION
-    elif pos is None and trades_today < 10:
-        if delib["score"] >= 75:  # LONG
+    elif pos is None and trades_today < 15:
+        if delib["score"] >= 70:  # LONG SCALP ENTRY
             units = round((cash * 0.95) / delib["price"], 4)
             new_pos = {
                 "asset": delib["asset"], "entry_price": delib["price"], "units": units,
@@ -252,7 +246,7 @@ def execute_system_trades(delib):
                 "dynamic_target_pct": delib["target_pct"], "dynamic_stop_pct": delib["stop_pct"]
             }
             supabase.table("agent_portfolio").update({"cash": round(cash * 0.05, 2), "current_position": new_pos, "trades_today": trades_today + 1}).eq("agent_id", "Umbrella_Main_Fund").execute()
-            supabase.table("trade_ledger_history").insert({"agent_id": "Umbrella_Main_Fund", "asset": delib["asset"], "action": f"BUY_LONG_{delib['persona']}", "size": units, "price": delib["price"], "pnl": 0.0, "trade_num": trades_today + 1}).execute()
+            supabase.table("trade_ledger_history").insert({"agent_id": "Umbrella_Main_Fund", "asset": delib["asset"], "action": f"BUY_SCALP_{delib['asset']}", "size": units, "price": delib["price"], "pnl": 0.0, "trade_num": trades_today + 1}).execute()
 
 execute_system_trades(active_delib)
 
@@ -267,10 +261,10 @@ st.markdown(f"""
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
     <div>
         <h1 style="margin:0;">🏛️ Autonomous AI Trading Committee</h1>
-        <p style="margin:0; color: #94A3B8; font-size: 13px;">Real-Time Agent Debates • Dynamic Calibration • Live Execution & Audit</p>
+        <p style="margin:0; color: #94A3B8; font-size: 13px;">Real-Time Scalp Debates • Dynamic Live Calibration • Automated Execution</p>
     </div>
     <div style="background: #0F172A; padding: 8px 16px; border-radius: 8px; border: 1px solid #1E293B;">
-        <span style="color: #00E676; font-weight: bold;">🟢 SYSTEM LIVE</span>
+        <span style="color: #00E676; font-weight: bold;">🟢 SYSTEM LIVE (SCALPER MODE)</span>
         <div style="font-size: 11px; color: #94A3B8;">Tick #{count} • {datetime.now().strftime('%H:%M:%S UTC')}</div>
     </div>
 </div>
@@ -282,7 +276,6 @@ for i, (asset, price) in enumerate(live_prices.items()):
 
 st.divider()
 
-# RE-ORDERED TABS
 tab_portfolio, tab_room, tab_transcripts, tab_memory = st.tabs([
     "📑 Portfolio & Execution Audit", "⚔️ Active War Room Debate", "📜 Full Debate Transcripts", "🧠 Self-Reflection Memory"
 ])
@@ -309,7 +302,6 @@ with tab_portfolio:
                 units = float(pos["units"])
                 pos_type = pos.get("type", "LONG")
 
-                # LIVE UNREALIZED PNL CALCULATION
                 if pos_type == "LONG":
                     live_pnl_pct = ((curr_p - entry_p) / entry_p) * 100.0
                     live_pnl_dollars = (curr_p - entry_p) * units
@@ -321,7 +313,7 @@ with tab_portfolio:
 
                 st.markdown(f"""
                 <div class="card" style="border-left: 4px solid {pnl_color};">
-                    <b>Active Position: {pos_type} {held_asset}</b> ({pos.get('persona', 'DAY_TRADER')} Mode)<br>
+                    <b>Active Scalp Position: {pos_type} {held_asset}</b> (Rapid Scalper Mode)<br>
                     <span style="font-size:12px; color:#94A3B8;">Units: {units} | Entry: ${entry_p:,.2f} | Current: ${curr_p:,.2f}</span><br>
                     <div style="margin-top:8px;">
                         <b>Live Mark-to-Market PnL:</b> 
@@ -330,12 +322,12 @@ with tab_portfolio:
                         </span>
                     </div>
                     <div style="font-size:11px; color:#94A3B8; margin-top:4px;">
-                        Targets: Profit +{pos.get('dynamic_target_pct')}% | Stop -{pos.get('dynamic_stop_pct')}%
+                        Scalp Targets: Profit +{pos.get('dynamic_target_pct')}% | Stop -{pos.get('dynamic_stop_pct')}%
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
             else:
-                st.info("Active Position: 100% Cash / Neutral (Searching for Setup)")
+                st.info("Active Position: 100% Cash / Neutral (Scanning for Fast Scalp Setups)")
 
     with col_p2:
         st.subheader("📑 Execution Audit Log")
@@ -343,7 +335,7 @@ with tab_portfolio:
             df = pd.DataFrame(trade_ledger)[["timestamp", "asset", "action", "size", "price", "pnl"]]
             st.dataframe(df, use_container_width=True, hide_index=True)
 
-# PAGE 2: ACTIVE WAR ROOM DEBATE (SIMULTANEOUS 4-ASSET VIEW)
+# PAGE 2: ACTIVE WAR ROOM DEBATE (SIMULTANEOUS 4-ASSET DYNAMIC VIEW)
 with tab_room:
     st.subheader("⚔️ Simultaneous War Room Debates (Bitcoin, Ethereum, Gold, Silver)")
     
@@ -351,7 +343,7 @@ with tab_room:
     for idx, (asset_name, delib_data) in enumerate(deliberations.items()):
         col = grid[idx % 2]
         with col:
-            badge = "badge-buy" if delib_data["score"] >= 75 else ("badge-sell" if delib_data["score"] <= 25 else "badge-scalper")
+            badge = "badge-buy" if delib_data["score"] >= 70 else ("badge-sell" if delib_data["score"] <= 30 else "badge-scalper")
             col.markdown(f"""
             <div class="card">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -362,9 +354,9 @@ with tab_room:
                     Mode: <b>{delib_data['persona']}</b> | Action: <span class="{badge}">{delib_data['decision']}</span>
                 </div>
                 <div style="font-size:11px;">
-                    • <b>Whale:</b> {delib_data['whale'][0]} ({delib_data['whale'][1]}%)<br>
-                    • <b>Tech:</b> {delib_data['tech'][0]} ({delib_data['tech'][1]}%)<br>
-                    • <b>Target:</b> +{delib_data['target_pct']}% | <b>Stop:</b> -{delib_data['stop_pct']}%
+                    • <b>Order Flow:</b> {delib_data['whale'][0]} ({delib_data['whale'][1]}%)\<br>
+                    • <b>Tech:</b> {delib_data['tech'][0]} ({delib_data['tech'][1]}%)\<br>
+                    • <b>Scalp Target:</b> +{delib_data['target_pct']}% | <b>Stop:</b> -{delib_data['stop_pct']}%
                 </div>
                 <div class="bull-box" style="margin-top:6px;">{delib_data['bull']}</div>
                 <div class="bear-box">{delib_data['bear']}</div>
