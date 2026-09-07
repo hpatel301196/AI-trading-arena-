@@ -2,16 +2,15 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
-import yfinance as yf
 from order_flow_engine import CommodityOrderFlowEngine
 
 st.set_page_config(
-    page_title="AI Trading Arena - Institutional War Room",
+    page_title="AI Trading Arena - Master Analytical Terminal",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# --- PROFESSIONAL INSTITUTIONAL STYLING (CSS) ---
+# --- PROFESSIONAL INSTITUTIONAL STYLING ---
 st.markdown("""
     <style>
     .stApp {
@@ -20,128 +19,95 @@ st.markdown("""
     }
     div.stMetric {
         background-color: #161B22;
-        padding: 15px;
+        padding: 12px;
         border-radius: 8px;
         border: 1px solid #30363D;
     }
     </style>
 """, unsafe_allow_html=True)
 
-st.title("🛡️ Institutional Order Flow & AI War Room Terminal")
+st.title("🛡️ Institutional Order Flow & Analytics Terminal")
 
-# --- INITIALIZE SESSION STATE FOR AUTONOMOUS FEEDBACK & JOURNAL ---
-if "trade_journal" not in st.session_state:
-    st.session_state.trade_journal = pd.DataFrame([
-        {"ID": 101, "Time": "09:30:12", "Asset": "MGC", "Action": "BUY", "Entry": 4442.0, "Exit": 4455.0, "PnL": "+$550", "Score": 92, "Autonomous Action": "Weight increased (+0.05) for Order Flow."},
-        {"ID": 102, "Time": "08:15:40", "Asset": "MCL", "Action": "SELL", "Entry": 75.20, "Exit": 75.80, "PnL": "-$300", "Score": 64, "Autonomous Action": "Risk guardrail tightened stop-loss tolerance."}
-    ])
-
-if "agent_weights" not in st.session_state:
-    st.session_state.agent_weights = {
-        "Order Flow Weight": 1.30,
-        "Risk Guardrail Weight": 1.55,
-        "Delta Momentum Weight": 1.15
-    }
-
-# --- SIDEBAR GLOBAL CONTROLS ---
-st.sidebar.header("🕹️ Strategy & Risk Controls")
-selected_symbol_label = st.sidebar.selectbox("Active Asset", ["MGC (Micro Gold)", "MCL (Micro Crude)", "SIL (Micro Silver)"])
-max_daily_loss = st.sidebar.number_input("Lucid Max Daily Loss ($)", value=1000, step=100)
-kill_switch = st.sidebar.toggle("🚨 Emergency Kill Switch", value=False)
-
-if kill_switch:
-    st.error("⚠️ EMERGENCY KILL SWITCH ACTIVE: Agent Executions Halted.")
-
-# Map asset to Yahoo ticker for live price fetching
-ticker_map = {
-    "MGC (Micro Gold)": "GC=F",
-    "MCL (Micro Crude)": "CL=F",
-    "SIL (Micro Silver)": "SI=F"
-}
-selected_ticker = ticker_map[selected_symbol_label]
-
-@st.cache_data(ttl=30)
-def fetch_live_price(ticker):
-    try:
-        data = yf.Ticker(ticker).history(period="1d", interval="1m")
-        if not data.empty:
-            return float(data['Close'].iloc[-1]), float(data['Open'].iloc[0])
-    except Exception:
-        pass
-    # Fallback default baselines if offline
-    return (4442.0 if "GC" in ticker else (75.50 if "CL" in ticker else 31.20)), 4400.0
-
-live_price, open_price = fetch_live_price(selected_ticker)
-price_change = round(live_price - open_price, 2)
+# --- SIDEBAR: ASSET & RISK MONITORING ---
+st.sidebar.header("🕹️ Analytical Controls")
+selected_symbol = st.sidebar.selectbox("Active Commodity Feed", ["MGC (Micro Gold)", "MCL (Micro Crude)", "SIL (Micro Silver)"])
+max_daily_loss = st.sidebar.number_input("Lucid Max Daily Loss Limit ($)", value=1000, step=100)
+refresh_interval = st.sidebar.slider("Data Refresh Interval (s)", 1, 10, 3)
 
 # --- NAVIGATION TABS ---
-tab_war_room, tab_heatmap, tab_journal, tab_feedback = st.tabs([
-    "🤖 AI War Room & Agents", 
-    "🔥 Order Book Heatmap & Depth", 
-    "📋 Autonomous Trade Journal", 
-    "🧬 Autonomous Feedback Loop"
+tab_dashboard, tab_heatmap, tab_war_room, tab_risk = st.tabs([
+    "📊 Core Microstructure", 
+    "🔥 Order Book Heatmap", 
+    "🤖 Agent Diagnostic Logs", 
+    "🛡️ Prop Drawdown Monitor"
 ])
 
 # =========================================================
-# TAB 1: AI WAR ROOM & MULTI-AGENT SCORING
+# TAB 1: CORE MICROSTRUCTURE DASHBOARD
 # =========================================================
-with tab_war_room:
-    st.subheader(f"🤖 Multi-Agent War Room Deliberation — {selected_symbol_label}")
-    
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Live Market Price", f"${live_price:,.2f}", delta=f"{price_change:+.2f}")
-    c2.metric("Composite Agent Score", "88 / 100", delta="High Conviction")
-    c3.metric("Primary Buy Wall", f"${live_price - 4.0:,.2f}", delta="Strong Support")
-    c4.metric("Primary Sell Wall", f"${live_price + 5.5:,.2f}", delta="Resistance")
-    
+with tab_dashboard:
+    # --- TOP METRICS ROW ---
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric(label="Current Delta", value="+240 Contracts", delta="12% vs 5m Avg")
+    col2.metric(label="Dominant Wall", value="$2,652.50", delta="180 Bids (Strong)")
+    col3.metric(label="POC Price", value="$2,650.10")
+    col4.metric(label="Prop Loss Cushion", value="$820.00 / $1,000", delta="-18%")
+
     st.markdown("---")
-    
-    col_agents, col_chart = st.columns([1, 1.5])
-    
-    with col_agents:
-        st.subheader("🗣️ Specialized Agent Debate Feed")
-        
-        with st.status("🟢 Bull Agent (Microstructure):", expanded=True):
-            st.write(f"Aggressive buyers are absorbing ask liquidity on {selected_symbol_label}. Cumulative Delta is positive. Imbalance ratio favors longs (2.14x).")
-            
-        with st.status("🔴 Bear Agent (Resistance Check):", expanded=True):
-            st.write(f"Watching upper institutional limit sells near ${live_price + 5.5:,.2f}. Recommend structured profit targets.")
-            
-        with st.status("🛡️ Risk Guardrail Agent:", expanded=True):
-            st.write("Account drawdown is at 1.8%. Daily loss cushion is secure ($820 remaining). Position sizing approved.")
 
-        st.success(f"🎯 **War Room Verdict:** EXECUTE LONG near ${live_price - 4.0:,.2f} support.")
+    left_col, right_col = st.columns([2, 1])
 
-    with col_chart:
-        st.subheader("📈 Microstructure Execution Levels")
+    with left_col:
+        st.subheader(f"📈 Price Chart with Institutional Walls & POC ({selected_symbol})")
         
-        # Dynamic chart scaled to current live price
-        fig = go.Figure()
-        time_series = pd.date_range(end=pd.Timestamp.now(), periods=20, freq='min')
-        sim_prices = np.linspace(live_price - 5, live_price + 2, 20)
+        fig_price = go.Figure()
+        time_series = pd.date_range(end=pd.Timestamp.now(), periods=30, freq='min')
+        sim_prices = np.sin(np.linspace(0, 10, 30)) * 2 + 2650.0
+
+        fig_price.add_trace(go.Scatter(x=time_series, y=sim_prices, mode='lines+markers', name='Price', line=dict(color='#00E676')))
+        fig_price.add_hline(y=2650.10, line_dash="dash", line_color="gold", annotation_text="POC: $2,650.10")
+        fig_price.add_hline(y=2646.00, line_color="#00E676", line_width=3, annotation_text="BUY WALL: $2,646.00")
+        fig_price.add_hline(y=2653.50, line_color="#FF5252", line_width=3, annotation_text="SELL WALL: $2,653.50")
+
+        fig_price.update_layout(template="plotly_dark", height=450, margin=dict(l=10, r=10, t=30, b=10))
+        st.plotly_chart(fig_price, use_container_width=True)
+
+    with right_col:
+        st.subheader("📊 Level 2 Liquidity Depth")
         
-        fig.add_trace(go.Scatter(x=time_series, y=sim_prices, mode='lines+markers', name='Live Asset Price', line=dict(color='#00E676', width=2)))
-        fig.add_hline(y=live_price, line_dash="dash", line_color="gold", annotation_text=f"Live: ${live_price:,.2f}")
-        fig.add_hline(y=live_price - 4.0, line_color="#00E676", line_width=3, annotation_text="BUY WALL")
-        fig.add_hline(y=live_price + 5.5, line_color="#FF5252", line_width=3, annotation_text="SELL WALL")
-        
-        fig.update_layout(template="plotly_dark", height=400, margin=dict(l=10, r=10, t=20, b=10))
-        st.plotly_chart(fig, use_container_width=True)
+        prices_depth = np.linspace(2645, 2655, 15)
+        bid_volumes = np.random.randint(10, 120, size=15)
+        ask_volumes = np.random.randint(10, 120, size=15)
+        bid_volumes[3] = 310  
+        ask_volumes[12] = 250 
+
+        fig_depth = go.Figure()
+        fig_depth.add_trace(go.Bar(y=prices_depth, x=-bid_volumes, orientation='h', name='Bids', marker_color='#00E676'))
+        fig_depth.add_trace(go.Bar(y=prices_depth, x=ask_volumes, orientation='h', name='Asks', marker_color='#FF5252'))
+
+        fig_depth.update_layout(
+            barmode='overlay',
+            xaxis_title="Volume (Bids ← | → Asks)",
+            yaxis_title="Price ($)",
+            height=450,
+            template="plotly_dark",
+            margin=dict(l=10, r=10, t=30, b=10)
+        )
+        st.plotly_chart(fig_depth, use_container_width=True)
 
 # =========================================================
-# TAB 2: ORDER BOOK HEATMAP & DEPTH (DYNAMICALLY SCALED)
+# TAB 2: ORDER BOOK HEATMAP
 # =========================================================
 with tab_heatmap:
-    st.subheader(f"🔥 Time-Density Order Book Liquidity Heatmap — {selected_symbol_label}")
+    st.subheader("🔥 Time-Density Order Book Liquidity Heatmap")
     
-    # Dynamically center heatmap around live market price
-    heatmap_prices = np.round(np.linspace(live_price - 6.0, live_price + 6.0, 21), 2)
+    heatmap_prices = np.round(np.linspace(2645.0, 2655.0, 21), 2)
     timestamps = [f"T-{25 - i}s" for i in range(25)]
     
-    np.random.seed(int(live_price) % 100) # Seed varies per asset price
+    np.random.seed(42)
     matrix = np.random.randint(10, 80, size=(len(heatmap_prices), 25))
-    matrix[2, :] = np.random.randint(220, 310, size=25)  # Dynamic Support Wall
-    matrix[17, :] = np.random.randint(180, 250, size=25) # Dynamic Resistance Wall
+    matrix[2, :] = np.random.randint(220, 310, size=25)  
+    matrix[17, :] = np.random.randint(180, 250, size=25) 
 
     fig_hm = go.Figure(data=go.Heatmap(
         z=matrix,
@@ -151,32 +117,47 @@ with tab_heatmap:
         colorbar=dict(title='Contract Density')
     ))
 
-    fig_hm.add_hline(y=live_price, line_dash="dash", line_color="white", annotation_text="Live Mid")
+    fig_hm.add_hline(y=2650.10, line_dash="dash", line_color="white", annotation_text="POC")
     fig_hm.update_layout(height=480, template="plotly_dark", xaxis_title="Time Snapshots", yaxis_title="Price ($)")
     st.plotly_chart(fig_hm, use_container_width=True)
 
 # =========================================================
-# TAB 3: ACTIVE TRADE JOURNAL & LOG
+# TAB 3: AGENT DIAGNOSTIC LOGS
 # =========================================================
-with tab_journal:
-    st.subheader("📋 Autonomous Trade Journal & Audit Ledger")
-    st.markdown("Tracks automated agent decision parameters, execution scores, and closed outcomes.")
+with tab_war_room:
+    st.subheader("🤖 Multi-Agent Diagnostic Logs")
     
-    st.dataframe(st.session_state.trade_journal, use_container_width=True)
+    with st.status("Active Agent Microstructure Evaluation...", expanded=True):
+        st.write("🟢 **Order Flow Agent:** High passive bid density detected at $2,646.00.")
+        st.write("🟢 **Microstructure Agent:** Positive Cumulative Delta (+240) confirms buyer absorption.")
+        st.write("🛡️ **Risk Guardrail Agent:** Account equity cushion is healthy and within limits.")
+        st.write("⚡ **Execution Critic:** Order book imbalance ratio (2.14x) favors long bias.")
+
+    st.subheader("📋 Analytical Decision Ledger")
+    logs = pd.DataFrame([
+        {"Timestamp": "09:30:12", "Symbol": "MGC", "Signal": "BUY SETUP", "Price": 2646.50, "Status": "Optimal", "Agent Confidence": "91%"},
+        {"Timestamp": "09:15:00", "Symbol": "MGC", "Signal": "NEUTRAL", "Price": 2650.00, "Status": "Monitoring", "Agent Confidence": "45%"},
+        {"Timestamp": "09:02:44", "Symbol": "MCL", "Signal": "SELL SETUP", "Price": 68.40, "Status": "Optimal", "Agent Confidence": "84%"},
+    ])
+    st.dataframe(logs, use_container_width=True)
 
 # =========================================================
-# TAB 4: AUTONOMOUS FEEDBACK & SELF-EVOLUTION LOOP
+# TAB 4: PROP FIRM DRAWDOWN MONITOR
 # =========================================================
-with tab_feedback:
-    st.subheader("🧬 Autonomous Agent Self-Evolution Loop")
-    st.markdown("The feedback engine runs automatically in the background, analyzing past trade journal outcomes to dynamically tune agent parameters without manual intervention.")
+with tab_risk:
+    st.subheader("🛡️ Prop Firm Drawdown & Trailing Cushion")
     
-    f1, f2, f3 = st.columns(3)
-    f1.metric("Order Flow Weight", f"{st.session_state.agent_weights['Order Flow Weight']}x", delta="Autotuned")
-    f2.metric("Risk Guardrail Weight", f"{st.session_state.agent_weights['Risk Guardrail Weight']}x", delta="Autotuned")
-    f3.metric("Autonomous Learning Status", "ACTIVE", delta="Real-time loop running")
+    r1, r2, r3 = st.columns(3)
+    r1.metric("Max Daily Loss Limit", f"${max_daily_loss}")
+    r2.metric("Current Session PnL", "+$320.00", delta="Profitable")
+    r3.metric("Loss Cushion Remaining", f"${max_daily_loss - 180:.2f}")
+
+    st.markdown("### 📈 Cumulative Equity & Trailing Drawdown Floor")
     
-    st.markdown("---")
+    equity_data = pd.DataFrame({
+        "Trade": np.arange(1, 11),
+        "Account Equity": [50000, 50120, 50080, 50250, 50190, 50340, 50280, 50450, 50390, 50500],
+        "Trailing Drawdown Floor": [49000, 49120, 49120, 49250, 49250, 49340, 49340, 49450, 49450, 49500]
+    })
     
-    st.subheader("📝 Autonomous Adaptation History")
-    st.info("💡 **Background Loop Status:** The system continuously audits completed trades. When slippage or resistance miscalculations occur, agent confidence weights self-adjust instantly to protect daily drawdown limits.")
+    st.line_chart(equity_data.set_index("Trade"))
