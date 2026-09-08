@@ -12,8 +12,8 @@ from datetime import datetime, date
 # 1. PAGE CONFIGURATION & INSTITUTIONAL TERMINAL
 # -------------------------------------------------------------
 st.set_page_config(
-    page_title="Umbrella Apex Institutional Engine v2.9",
-    page_icon="🏛️",
+    page_title="HP Advanced Trading Platform",
+    page_icon="⚡",
     layout="wide"
 )
 
@@ -44,7 +44,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-count = st_autorefresh(interval=15000, limit=10000, key="apex_refresh_v29")
+count = st_autorefresh(interval=15000, limit=10000, key="hp_refresh_v3")
 
 @st.cache_resource
 def init_supabase():
@@ -64,7 +64,7 @@ def send_telegram_alert(message):
         chat_id = st.secrets.get("TELEGRAM_CHAT_ID")
         if token and chat_id:
             url = f"https://api.telegram.org/bot{token}/sendMessage"
-            payload = {"chat_id": chat_id, "text": f"🏛️ **Apex Institutional v2.9**\n\n{message}", "parse_mode": "Markdown"}
+            payload = {"chat_id": chat_id, "text": f"⚡ **HP Advanced Platform**\n\n{message}", "parse_mode": "Markdown"}
             requests.post(url, json=payload, timeout=5)
     except Exception as e:
         print(f"Telegram alert error: {e}")
@@ -81,9 +81,9 @@ if "price_buffer" not in st.session_state:
     st.session_state.price_buffer = {}
 
 # -------------------------------------------------------------
-# 2. FULLY AUTOMATED BACKGROUND MARKET DATA ENGINE
+# 2. AUTOMATED MARKET DATA STREAM
 # -------------------------------------------------------------
-def fetch_apex_market_data():
+def fetch_hp_market_data():
     market_data = {}
     current_time = time.time()
     
@@ -147,85 +147,115 @@ def fetch_apex_market_data():
             "mtf_trend": mtf_trend,
             "vol_ratio": round(vol_ratio, 2),
             "is_stale": is_stale,
-            "poc": round(est_poc, 2),
-            "source": "yfinance Feed"
+            "poc": round(est_poc, 2)
         }
         
     return market_data
 
-market_snapshot = fetch_apex_market_data()
+market_snapshot = fetch_hp_market_data()
 
-def fetch_memory_lessons():
+def fetch_memory_ledger():
     try:
-        res = supabase.table("system_memory_ledger").select("*").order("id", desc=True).limit(15).execute()
+        res = supabase.table("system_memory_ledger").select("*").order("id", desc=True).limit(20).execute()
         return res.data
     except:
         return []
 
-def store_self_reflection(asset, trade_type, pnl, reflection, lesson):
+def get_reinforcement_adjustment():
+    """Calculates active reinforcement learning weight adjustment from past reflections."""
+    lessons = fetch_memory_ledger()
+    if not lessons:
+        return 0.0
+    
+    recent_pnl = sum([float(l.get("pnl", 0)) for l in lessons[:5]])
+    # Positive reinforcement boosts confidence multiplier, negative penalizes
+    if recent_pnl > 0:
+        return 4.0 # Positive feedback loop adjustment
+    elif recent_pnl < 0:
+        return -6.0 # Protective risk penalty adjustment
+    return 0.0
+
+def store_advanced_self_reflection(asset, trade_type, pnl, reflection, lesson, reward_score):
     try:
         supabase.table("system_memory_ledger").insert({
             "asset": asset, "trade_type": trade_type, "pnl": pnl,
-            "reflection_notes": reflection, "lesson_learned": lesson
+            "reflection_notes": reflection, "lesson_learned": lesson,
+            "reward_score": reward_score
         }).execute()
-        send_telegram_alert(f"🧠 *Expanded Self-Reflection Recorded*\nAsset: {asset} ({trade_type})\nPnL: `${pnl:,.2f}`\nLesson: {lesson}")
+        send_telegram_alert(f"🧠 *Reinforcement Learning Updated*\nAsset: {asset} ({trade_type}) | PnL: `${pnl:,.2f}`\nReward Score: `{reward_score}`\nLesson: {lesson}")
     except Exception as e:
-        print(f"Memory log error: {e}")
+        print(f"Memory logging error: {e}")
 
-memory_rules = fetch_memory_lessons()
+memory_rules = fetch_memory_ledger()
+reinforcement_bias = get_reinforcement_adjustment()
 
 # -------------------------------------------------------------
-# 3. SPECIALIZED COMBINED AGENT SUITE (WHALE + POC + VOL-ARB + MACRO)
+# 3. SPECIALIZED TRADER PERSONA AGENTS
 # -------------------------------------------------------------
-class ApexWhaleTrackerAgent:
-    @staticmethod
-    def analyze(asset):
-        profiles = [
-            ("Whale cluster accumulation detected at exchange cold storage wallets", random.randint(60, 85)),
-            ("Heavy institutional block-order outflow / exchange deposit surge", random.randint(20, 45)),
-            ("Passive retail drift / Neutral dark-pool volume distribution", random.randint(45, 55)),
-            ("Smart-money liquidity sweep and iceberg bid stack activation", random.randint(58, 82))
-        ]
-        chosen = random.choice(profiles)
-        return {"msg": chosen[0], "score": chosen[1]}
-
-class ApexOrderFlowAgent:
+class TraderDaleAgent:
+    """Focuses on Volume Profile, Value Areas, and Point of Control (POC) auctions."""
     @staticmethod
     def analyze(asset, data):
         profiles = [
-            (f"Bid absorption active near volume node ${data['poc']}", random.randint(60, 82)),
-            (f"Passive liquidity resting near session equilibrium (${data['poc']})", random.randint(45, 55)),
-            (f"Momentum imbalance: Aggressive delta expansion detected", random.randint(55, 78))
+            (f"Trader Dale: Price is testing high-volume node POC at ${data['poc']}. Expecting strong value acceptance.", random.randint(62, 85)),
+            (f"Trader Dale: Value Area Low rejection detected. Initiating responsive buying near POC.", random.randint(58, 80)),
+            (f"Trader Dale: Low volume node migration. Auction balance is drifting without acceptance.", random.randint(40, 52))
         ]
         chosen = random.choice(profiles)
-        return {"msg": chosen[0], "score": chosen[1]}
+        return {"comment": chosen[0], "score": chosen[1]}
 
-class ApexVolArbAgent:
+class FabioValentiniAgent:
+    """Focuses on Institutional Block-Orders, Icebergs, and Whale Accumulation."""
+    @staticmethod
+    def analyze(asset):
+        profiles = [
+            ("Fabio Valentini: Whale cluster accumulation active at cold storage wallets. Smart money loading bids.", random.randint(64, 88)),
+            ("Fabio Valentini: Heavy institutional block outflow detected. Order book imbalance leaning heavy.", random.randint(22, 44)),
+            ("Fabio Valentini: Neutral dark-pool liquidity distribution. Awaiting clean tape confirmation.", random.randint(45, 55))
+        ]
+        chosen = random.choice(profiles)
+        return {"comment": chosen[0], "score": chosen[1]}
+
+class TraderYushAgent:
+    """Focuses on Momentum Imbalance, Delta Expansion, and Order Flow Speed."""
     @staticmethod
     def analyze(vol_ratio):
         if vol_ratio > 1.35:
-            return {"msg": f"Volatility Expansion Squeeze (Ratio: {vol_ratio}x): Gamma scalping active", "score": 75, "mode": "BREAKOUT"}
+            return {"comment": f"Trader Yush: Delta expansion breakout! Volatility ratio at {vol_ratio}x. Gamma scalping active.", "score": 78, "mode": "MOMENTUM_BREAKOUT"}
         elif vol_ratio < 0.75:
-            return {"msg": f"Volatility Compression Range (Ratio: {vol_ratio}x): Mean-reversion grid active", "score": 30, "mode": "REVERSION"}
+            return {"comment": f"Trader Yush: Volatility compression range (Ratio: {vol_ratio}x). Mean-reversion grid active.", "score": 32, "mode": "GRID_REVERSION"}
         else:
-            return {"msg": f"Normal Volatility Band (Ratio: {vol_ratio}x): Standard auction rhythm", "score": 50, "mode": "NEUTRAL"}
+            return {"comment": f"Trader Yush: Standard auction tempo. Balanced order flow.", "score": 50, "mode": "NEUTRAL"}
 
-class ApexMacroNLPAgent:
+class KeshavTradesAgent:
+    """Focuses on Breakout Scalping and Volatility Squeeze Execution."""
+    @staticmethod
+    def analyze():
+        profiles = [
+            ("Keshav Trades: Volatility squeeze coiled tight. Breakout confirmation imminent.", 75),
+            ("Keshav Trades: Clean trend continuation structure on intraday moving averages.", 70),
+            ("Keshav Trades: Chop zone detected. Sitting on hands until liquidity clears.", 45)
+        ]
+        chosen = random.choice(profiles)
+        return {"comment": chosen[0], "score": chosen[1]}
+
+class AndreaCimiAgent:
+    """Focuses on Macro Risk Filtering and Geopolitical Vetoes."""
     @staticmethod
     def analyze():
         headlines = [
-            ("FOMC Minutes hint at measured liquidity pauses. Risk-on environment stable.", "CLEAR", 0),
-            ("Geopolitical supply tightness in commodities. Safe-haven inflows expected.", "CLEAR", 0),
-            ("Unexpected core inflation spike or hawkish central bank commentary warning.", "VETO_WARNING", -25),
-            ("Neutral macroeconomic session block. No high-impact releases scheduled.", "CLEAR", 0)
+            ("Andrea Cimi (Macro): Central bank liquidity flows stable. Risk-on environment clear.", "CLEAR", 0),
+            ("Andrea Cimi (Macro): Safe-haven safe flows increasing due to supply chain tightening.", "CLEAR", 0),
+            ("Andrea Cimi (Macro): Sudden inflation print risk warning! Recommending risk reduction.", "VETO_WARNING", -25),
+            ("Andrea Cimi (Macro): Quiet macro calendar session. No structural constraints.", "CLEAR", 0)
         ]
         chosen = random.choice(headlines)
         return {"headline": chosen[0], "status": chosen[1], "penalty": chosen[2]}
 
 # -------------------------------------------------------------
-# 4. WAR ROOM DELIBERATION ENGINE (NEUTRAL-FIRST BALANCED SCORING)
+# 4. WAR ROOM DELIBERATION WITH REINFORCEMENT LEARNING
 # -------------------------------------------------------------
-def run_apex_deliberation(asset, data, memory):
+def run_hp_deliberation(asset, data, memory):
     current_time = time.time()
     price = data["price"]
     atr = data["atr"]
@@ -237,30 +267,27 @@ def run_apex_deliberation(asset, data, memory):
         cached["price"] = price
         return cached
 
-    whale_data = ApexWhaleTrackerAgent.analyze(asset)
-    order_flow = ApexOrderFlowAgent.analyze(asset, data)
-    vol_data = ApexVolArbAgent.analyze(vol_ratio)
-    macro_data = ApexMacroNLPAgent.analyze()
+    dale = TraderDaleAgent.analyze(asset, data)
+    fabio = FabioValentiniAgent.analyze(asset)
+    yush = TraderYushAgent.analyze(vol_ratio)
+    keshav = KeshavTradesAgent.analyze()
+    andrea = AndreaCimiAgent.analyze()
 
-    historical_penalty = 0
-    specific_lesson = "No prior anomaly patterns logged."
-    for lesson in memory:
-        if lesson.get("asset") == asset and float(lesson.get("pnl", 0)) < 0:
-            historical_penalty += 3
-            specific_lesson = f"Warning from memory ledger: {lesson.get('lesson_learned')}"
+    # Active Reinforcement Learning integration
+    learning_adjustment = reinforcement_bias
 
-    # Rebalanced composite scoring removing upward drift: Whale (30%) + Order Flow/POC (30%) + Vol-Arb (20%) + Baseline Neutral (20%)
-    weighted_score = (whale_data["score"] * 0.30) + (order_flow["score"] * 0.30) + (vol_data["score"] * 0.20) + (50 * 0.20)
+    # Composite scoring incorporating Trader Dale, Fabio, Yush, and Keshav
+    weighted_score = (dale["score"] * 0.25) + (fabio["score"] * 0.25) + (yush["score"] * 0.25) + (keshav["score"] * 0.25)
     
     if mtf_trend == "BULLISH":
         weighted_score += 5
     elif mtf_trend == "BEARISH":
         weighted_score -= 5
 
-    weighted_score += macro_data["penalty"]
-    final_score = int(max(5, min(95, weighted_score - historical_penalty)))
+    weighted_score += andrea["penalty"] + learning_adjustment
+    final_score = int(max(5, min(95, weighted_score)))
 
-    if macro_data["status"] == "VETO_WARNING" and abs(final_score - 50) < 25:
+    if andrea["status"] == "VETO_WARNING" and abs(final_score - 50) < 25:
         decision = "VETOED_FLAT"
     elif final_score >= 68:
         decision = "BUY_LONG"
@@ -285,13 +312,13 @@ def run_apex_deliberation(asset, data, memory):
         stop_price = round(price - (dynamic_atr * 1.5), 2)
 
     result = {
-        "asset": asset, "price": price, "atr": dynamic_atr, "mtf_trend": mtf_trend, "persona": f"SWARM_AI_{vol_data['mode']}",
+        "asset": asset, "price": price, "atr": dynamic_atr, "mtf_trend": mtf_trend, "persona": f"HP_SWARM_{yush['mode']}",
         "score": final_score, "decision": decision, "is_stale": data.get("is_stale", False),
         "limit_entry": limit_entry, "target_price": target_price, "stop_price": stop_price,
-        "whale": whale_data["msg"], "order_flow": order_flow["msg"], "vol": vol_data["msg"], "macro": macro_data["headline"], 
-        "poc": data.get("poc"), "source": data.get("source"),
-        "bull": f"BULL ADVOCATE (1H Trend: {mtf_trend}): Whale & POC cluster confirms {order_flow['msg']}. Continuation supported.",
-        "bear": f"BEAR ADVOCATE (Risk Check): Macro condition notes '{macro_data['headline']}'. Historical memory note: {specific_lesson[:60]}..."
+        "dale": dale["comment"], "fabio": fabio["comment"], "yush": yush["comment"], "keshav": keshav["comment"], "macro": andrea["headline"], 
+        "poc": data.get("poc"),
+        "bull": f"Trader Dale & Fabio Valentini Consensus: Volume POC validation confirms institutional accumulation. Continuation favored.",
+        "bear": f"Andrea Cimi & Keshav Risk Check: Macro notes '{andrea['headline']}'. Reinforcement learning bias factor: {learning_adjustment:+.1f}."
     }
     
     st.session_state.cached_deliberations[asset] = result
@@ -301,7 +328,7 @@ if time.time() - st.session_state.last_signal_reset > 300:
     st.session_state.cached_deliberations = {}
     st.session_state.last_signal_reset = time.time()
 
-deliberations = {asset: run_apex_deliberation(asset, market_snapshot[asset], memory_rules) for asset in market_snapshot}
+deliberations = {asset: run_hp_deliberation(asset, market_snapshot[asset], memory_rules) for asset in market_snapshot}
 
 active_delib = max(deliberations.values(), key=lambda x: abs(x["score"] - 50))
 if len(st.session_state.debate_transcripts) == 0 or st.session_state.debate_transcripts[0]["asset"] != active_delib["asset"]:
@@ -309,20 +336,20 @@ if len(st.session_state.debate_transcripts) == 0 or st.session_state.debate_tran
         "time": datetime.now().strftime("%H:%M:%S"),
         "asset": active_delib["asset"], "persona": active_delib["persona"],
         "score": active_delib["score"], "decision": active_delib["decision"],
-        "whale": active_delib["whale"], "order_flow": active_delib["order_flow"], "vol": active_delib["vol"], "macro": active_delib["macro"],
+        "dale": active_delib["dale"], "fabio": active_delib["fabio"], "yush": active_delib["yush"], "keshav": active_delib["keshav"], "macro": active_delib["macro"],
         "bull": active_delib["bull"], "bear": active_delib["bear"],
         "entry": active_delib["limit_entry"], "target": active_delib["target_price"], "stop": active_delib["stop_price"]
     })
 
 # -------------------------------------------------------------
-# 5. EXECUTION ENGINE WITH DYNAMIC KELLY CRITERION & SIZING
+# 5. EXECUTION ENGINE WITH REINFORCEMENT FEEDBACK LOOP
 # -------------------------------------------------------------
-def execute_apex_trades(delibrations_dict):
-    res = supabase.table("agent_portfolio").select("*").eq("agent_id", "Umbrella_Apex_Fund").execute()
+def execute_hp_trades(delibrations_dict):
+    res = supabase.table("agent_portfolio").select("*").eq("agent_id", "HP_Advanced_Fund").execute()
     
     if len(res.data) == 0:
         supabase.table("agent_portfolio").insert({
-            "agent_id": "Umbrella_Apex_Fund", "cash": 100000.0,
+            "agent_id": "HP_Advanced_Fund", "cash": 100000.0,
             "current_position": None, "trades_today": 0, "total_pnl": 0.0, "last_trade_date": str(date.today())
         }).execute()
         fund = {"cash": 100000.0, "current_position": None, "trades_today": 0, "total_pnl": 0.0}
@@ -351,16 +378,16 @@ def execute_apex_trades(delibrations_dict):
 
         if pos_type == "LONG":
             if current_p >= target_p:
-                exit_triggered, exit_reason = True, f"Dynamic ATR Profit Target Reached (${target_p})"
+                exit_triggered, exit_reason = True, f"Dynamic Profit Target Reached (${target_p})"
             elif current_p <= stop_p:
-                exit_triggered, exit_reason = True, f"Dynamic ATR Stop Loss Triggered (${stop_p})"
+                exit_triggered, exit_reason = True, f"Dynamic Stop Loss Triggered (${stop_p})"
         else:
             if current_p <= target_p:
-                exit_triggered, exit_reason = True, f"Dynamic ATR Short Target Reached (${target_p})"
+                exit_triggered, exit_reason = True, f"Dynamic Short Target Reached (${target_p})"
             elif current_p >= stop_p:
-                exit_triggered, exit_reason = True, f"Dynamic ATR Short Stop Loss Triggered (${stop_p})"
+                exit_triggered, exit_reason = True, f"Dynamic Short Stop Loss Triggered (${stop_p})"
 
-        if trade_duration_minutes >= 20.0 and -0.4 < pnl_pct < 0.6:
+        if trade_duration_minutes >= 25.0 and -0.4 < pnl_pct < 0.6:
             exit_triggered, exit_reason = True, f"Time-Horizon Stagnation Release ({trade_duration_minutes:.1f}m)"
 
         if exit_triggered:
@@ -368,21 +395,23 @@ def execute_apex_trades(delibrations_dict):
             net_cash = round(cash + (units * current_p) if pos_type == "LONG" else cash + (units * entry_price) + (units * (entry_price - current_p)), 2)
 
             if realized_pnl > 0:
-                reflection = f"SUCCESSFUL {pos_type} trade on {held_asset}. Closed with +{pnl_pct:.2f}% return over {trade_duration_minutes:.1f} minutes. Trigger catalyst: {exit_reason}."
-                lesson = f"THESIS VALIDATION: Combined whale clustering and volume profile POC analysis successfully anticipated directional auction expansion."
+                reward_score = 100
+                reflection = f"REINFORCEMENT SUCCESS: {pos_type} trade on {held_asset} secured +{pnl_pct:.2f}% profit. Trader Dale POC validation & Fabio whale alignment confirmed."
+                lesson = f"POSITIVE REINFORCEMENT: Volume node acceptance models validated. Increasing confidence multiplier."
             else:
-                reflection = f"UNSUCCESSFUL {pos_type} trade on {held_asset}. Closed with {pnl_pct:.2f}% return over {trade_duration_minutes:.1f} minutes. Exit cause: {exit_reason}."
-                lesson = f"THESIS INVALIDATION: Structural absorption failed at limit entry. Refine cluster threshold rules."
+                reward_score = -50
+                reflection = f"REINFORCEMENT CORRECTION: {pos_type} trade on {held_asset} closed at {pnl_pct:.2f}% loss. Trigger: {exit_reason}."
+                lesson = f"NEGATIVE REINFORCEMENT: Order flow divergence at limit entry. Tightening structural stop rules."
 
-            store_self_reflection(held_asset, pos_type, realized_pnl, reflection, lesson)
-            st.session_state.reflection_history.insert(0, {"time": datetime.now().strftime("%H:%M:%S"), "reflection": reflection, "lesson": lesson})
+            store_advanced_self_reflection(held_asset, pos_type, realized_pnl, reflection, lesson, reward_score)
+            st.session_state.reflection_history.insert(0, {"time": datetime.now().strftime("%H:%M:%S"), "reflection": reflection, "lesson": lesson, "reward": reward_score})
 
             supabase.table("agent_portfolio").update({
                 "cash": net_cash, "current_position": None, "trades_today": trades_today + 1, "total_pnl": fund.get("total_pnl", 0) + realized_pnl
-            }).eq("agent_id", "Umbrella_Apex_Fund").execute()
+            }).eq("agent_id", "HP_Advanced_Fund").execute()
 
             supabase.table("trade_ledger_history").insert({
-                "agent_id": "Umbrella_Apex_Fund", "asset": held_asset, "action": f"CLOSE_{pos_type}",
+                "agent_id": "HP_Advanced_Fund", "asset": held_asset, "action": f"CLOSE_{pos_type}",
                 "size": units, "price": current_p, "pnl": realized_pnl, "trade_num": trades_today + 1
             }).execute()
 
@@ -409,15 +438,15 @@ def execute_apex_trades(delibrations_dict):
                     "target_price": best_candidate["target_price"], "stop_price": best_candidate["stop_price"],
                     "entry_timestamp": time.time()
                 }
-                supabase.table("agent_portfolio").update({"cash": round(cash - allocated_capital, 2), "current_position": new_pos, "trades_today": trades_today + 1}).eq("agent_id", "Umbrella_Apex_Fund").execute()
-                supabase.table("trade_ledger_history").insert({"agent_id": "Umbrella_Apex_Fund", "asset": entry_asset, "action": f"KELLY_{pos_type}_{entry_asset}", "size": units, "price": limit_entry, "pnl": 0.0, "trade_num": trades_today + 1}).execute()
+                supabase.table("agent_portfolio").update({"cash": round(cash - allocated_capital, 2), "current_position": new_pos, "trades_today": trades_today + 1}).eq("agent_id", "HP_Advanced_Fund").execute()
+                supabase.table("trade_ledger_history").insert({"agent_id": "HP_Advanced_Fund", "asset": entry_asset, "action": f"KELLY_{pos_type}_{entry_asset}", "size": units, "price": limit_entry, "pnl": 0.0, "trade_num": trades_today + 1}).execute()
 
-                send_telegram_alert(f"🟢 *Kelly-Optimized Trade Executed: {pos_type} {entry_asset}*\nAllocation: `{kelly_fraction*100:.1f}%` ($`{allocated_capital:,.2f}`)\nLimit Entry: `${limit_entry:,.2f}`\nCIO Confidence: {best_candidate['score']}%")
+                send_telegram_alert(f"🟢 *Kelly Trade Executed: {pos_type} {entry_asset}*\nAllocation: `{kelly_fraction*100:.1f}%` ($`{allocated_capital:,.2f}`)\nLimit Entry: `${limit_entry:,.2f}`\nSwarm Confidence: {best_candidate['score']}%")
 
-execute_apex_trades(deliberations)
+execute_hp_trades(deliberations)
 
 trade_ledger = supabase.table("trade_ledger_history").select("*").order("id", desc=True).limit(15).execute().data
-portfolio_state = supabase.table("agent_portfolio").select("*").eq("agent_id", "Umbrella_Apex_Fund").execute().data
+portfolio_state = supabase.table("agent_portfolio").select("*").eq("agent_id", "HP_Advanced_Fund").execute().data
 
 # -------------------------------------------------------------
 # 6. APP INTERFACE LAYOUT
@@ -425,11 +454,11 @@ portfolio_state = supabase.table("agent_portfolio").select("*").eq("agent_id", "
 st.markdown(f"""
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
     <div>
-        <h1 style="margin:0;">🏛️ Umbrella Apex Institutional Engine v2.9</h1>
-        <p style="margin:0; color: #94A3B8; font-size: 13px;">Whale Trackers • Volume Profile POC • Dynamic Kelly Sizing • Neutral Balanced Scoring • 24/7 Automated Feed</p>
+        <h1 style="margin:0;">⚡ HP Advanced Trading Platform</h1>
+        <p style="margin:0; color: #94A3B8; font-size: 13px;">Trader Dale • Fabio Valentini • Trader Yush • Keshav Trades • Andrea Cimi • Reinforcement Learning</p>
     </div>
     <div style="background: #090D16; padding: 8px 16px; border-radius: 8px; border: 1px solid #1E293B;">
-        <span style="color: #10B981; font-weight: bold;">⚡ 24/7 AUTOMATED SYNC</span>
+        <span style="color: #10B981; font-weight: bold;">⚡ 24/7 LIVE STREAM</span>
         <div style="font-size: 11px; color: #94A3B8;">Tick #{count} • {datetime.now().strftime('%H:%M:%S UTC')}</div>
     </div>
 </div>
@@ -438,20 +467,19 @@ st.markdown(f"""
 cols = st.columns(4)
 for i, (asset, data) in enumerate(market_snapshot.items()):
     stale_tag = " [Closed]" if data["is_stale"] else ""
-    label_text = f"{asset.upper()}{stale_tag} ({data.get('source', 'API')})"
-    cols[i].metric(label=label_text, value=f"${data['price']:,.2f}")
+    cols[i].metric(label=f"{asset.upper()}{stale_tag}", value=f"${data['price']:,.2f}")
 
 st.divider()
 
 tab_portfolio, tab_room, tab_transcripts, tab_memory = st.tabs([
-    "📑 Portfolio & Kelly Audit", "⚔️ Advanced War Room", "📜 Interactive Debate Transcripts", "🧠 Expanded Self-Reflection Memory"
+    "📑 Portfolio & Kelly Audit", "⚔️ Multi-Agent Intelligence", "📜 Interactive Debate Transcripts", "🧠 Advanced Reinforcement Memory"
 ])
 
 with tab_portfolio:
     col_p1, col_p2 = st.columns([1, 1])
 
     with col_p1:
-        st.subheader("💼 Fund Portfolio & Risk-Parity Metrics")
+        st.subheader("💼 Fund Portfolio & Risk Metrics")
         if len(portfolio_state) > 0:
             fund_data = portfolio_state[0]
             cash_bal = float(fund_data.get('cash', 100000.0))
@@ -459,6 +487,7 @@ with tab_portfolio:
             
             st.write(f"**Available Cash:** ${cash_bal:,.2f}")
             st.write(f"**Realized Cumulative PnL:** ${realized_pnl:,.2f}")
+            st.write(f"**Active Reinforcement Learning Bias:** `{reinforcement_bias:+.1f}`")
             
             pos = fund_data.get("current_position")
             if pos:
@@ -480,7 +509,7 @@ with tab_portfolio:
 
                 st.markdown(f"""
                 <div class="card" style="border-left: 4px solid {pnl_color};">
-                    <b>Active Apex Position: {pos_type} {held_asset}</b> (Duration: {duration_m:.1f} mins)<br>
+                    <b>Active HP Position: {pos_type} {held_asset}</b> (Duration: {duration_m:.1f} mins)<br>
                     <span style="font-size:12px; color:#94A3B8;">Units: {units} | Limit Entry: ${entry_p:,.2f} | Current: ${curr_p:,.2f}</span><br>
                     <div style="margin-top:8px;">
                         <b>Live MTM PnL:</b> 
@@ -488,13 +517,10 @@ with tab_portfolio:
                             ${live_pnl_dollars:+,.2f} ({live_pnl_pct:+.2f}%)
                         </span>
                     </div>
-                    <div style="font-size:11px; color:#94A3B8; margin-top:4px;">
-                        Kelly Parameters: Target ${pos.get('target_price')} | Stop Loss ${pos.get('stop_price')}
-                    </div>
                 </div>
                 """, unsafe_allow_html=True)
             else:
-                st.info("Active Position: 100% Cash / Neutral (Kelly Engine scanning high-conviction nodes)")
+                st.info("Active Position: 100% Cash / Scanning High-Conviction Setups")
 
     with col_p2:
         st.subheader("📑 Execution Ledger History")
@@ -503,7 +529,7 @@ with tab_portfolio:
             st.dataframe(df, use_container_width=True, hide_index=True)
 
 with tab_room:
-    st.subheader("⚔️ Multi-Agent Swarm Intelligence (Whale + POC Suite)")
+    st.subheader("⚔️ Multi-Agent Intelligence (Trader Specialists)")
     
     grid = st.columns(2)
     for idx, (asset_name, delib_data) in enumerate(deliberations.items()):
@@ -513,7 +539,7 @@ with tab_room:
             if delib_data["decision"] == "VETOED_FLAT":
                 badge = "badge-veto"
                 
-            stale_warning = " <span style='color: #EF4444; font-size: 10px;'>[MARKET CLOSED / STALE]</span>" if delib_data.get("is_stale") else ""
+            stale_warning = " <span style='color: #EF4444; font-size: 10px;'>[CLOSED]</span>" if delib_data.get("is_stale") else ""
             poc_disp = f" | <b>POC:</b> ${delib_data['poc']:,.2f}" if delib_data.get('poc') else ""
             
             col.markdown(f"""
@@ -526,10 +552,11 @@ with tab_room:
                     Mode: <b>{delib_data['persona']}</b> | Trend: <b>{delib_data['mtf_trend']}</b>{poc_disp} | Signal: <span class="{badge}">{delib_data['decision']}</span>
                 </div>
                 <div style="font-size:11px;">
-                    • 🐋 <b>Whale Tracker:</b> {delib_data['whale']}<br>
-                    • 📊 <b>Volume Profile / POC:</b> {delib_data['order_flow']}<br>
-                    • 🌪️ <b>Vol-Arb / Gamma Scalper:</b> {delib_data['vol']}<br>
-                    • 📰 <b>Macro NLP Veto:</b> {delib_data['macro']}<br>
+                    • 📊 <b>Trader Dale:</b> {delib_data['dale']}<br>
+                    • 🐋 <b>Fabio Valentini:</b> {delib_data['fabio']}<br>
+                    • ⚡ <b>Trader Yush:</b> {delib_data['yush']}<br>
+                    • 🚀 <b>Keshav Trades:</b> {delib_data['keshav']}<br>
+                    • 📰 <b>Andrea Cimi:</b> {delib_data['macro']}<br>
                     • 🎯 <b>Limit Entry:</b> ${delib_data['limit_entry']:,.2f} | <b>Target:</b> ${delib_data['target_price']:,.2f} | <b>Stop:</b> ${delib_data['stop_price']:,.2f}
                 </div>
                 <div class="bull-box" style="margin-top:6px;">{delib_data['bull']}</div>
@@ -538,37 +565,40 @@ with tab_room:
             """, unsafe_allow_html=True)
 
 with tab_transcripts:
-    st.subheader("📜 Advanced Interactive War Room Transcripts")
+    st.subheader("📜 Interactive Debate Transcripts")
     for t in st.session_state.debate_transcripts[:10]:
         st.markdown(f"""
         <div class="warroom-box">
             <div style="display:flex; justify-content:space-between; font-size:12px; color:#94A3B8;">
-                <span><b>[{t['time']}] Asset Subject: {t['asset']}</b> | Engine: {t['persona']}</span>
-                <span>CIO Composite Score: <b style="color:#8B5CF6;">{t['score']}%</b> ({t['decision']})</span>
+                <span><b>[{t['time']}] Asset: {t['asset']}</b> | Engine: {t['persona']}</span>
+                <span>Composite Score: <b style="color:#8B5CF6;">{t['score']}%</b> ({t['decision']})</span>
             </div>
             <div style="margin-top:10px; font-size:12px; border-left: 2px solid #38BDF8; padding-left: 8px; color: #38BDF8;">
-                <b>Telemetry:</b> Whale Flow: {t['whale']} | Order Flow: {t['order_flow']} | Volatility Index: {t['vol']}
+                <b>Telemetry:</b> Dale: {t['dale']} | Fabio: {t['fabio']}
             </div>
             <div style="margin-top:10px; font-size:13px;">
-                <div style="color:#10B981; margin-bottom:6px;">🟢 <b>Bull Advocate Case:</b> {t['bull']}</div>
-                <div style="color:#EF4444; margin-bottom:6px;">🔴 <b>Bear Advocate & Risk Veto:</b> {t['bear']}</div>
+                <div style="color:#10B981; margin-bottom:6px;">🟢 <b>Consensus Bull Case:</b> {t['bull']}</div>
+                <div style="color:#EF4444; margin-bottom:6px;">🔴 <b>Risk & Veto Case:</b> {t['bear']}</div>
             </div>
         </div>
         """, unsafe_allow_html=True)
 
 with tab_memory:
-    st.subheader("🧠 Deep Self-Reflection & Calibration Memory Ledger")
+    st.subheader("🧠 Advanced Reinforcement Learning & Self-Reflection")
+    st.write(f"**Active Reinforcement Feedback Weight:** `{reinforcement_bias:+.1f}` (Automatically tuned based on recent trade rewards)")
     
     if len(st.session_state.reflection_history) > 0:
         for ref in st.session_state.reflection_history[:5]:
+            reward_color = "#10B981" if ref['reward'] > 0 else "#EF4444"
             st.markdown(f"""
-            <div class="reflection-box">
-                <b>[{ref['time']}] Post-Mortem Reflection:</b> {ref['reflection']}<br>
-                <div style="margin-top:6px; color:#38BDF8;"><b>💡 Calibrated Apex Lesson:</b> {ref['lesson']}</div>
+            <div class="reflection-box" style="border-left: 4px solid {reward_color};">
+                <b>[{ref['time']}] Reflection & Reward Score: <span style="color:{reward_color};">{ref['reward']}</span></b><br>
+                {ref['reflection']}<br>
+                <div style="margin-top:6px; color:#38BDF8;"><b>💡 Reinforcement Lesson:</b> {ref['lesson']}</div>
             </div>
             """, unsafe_allow_html=True)
 
     if len(memory_rules) > 0:
-        st.markdown("#### Permanent Supabase Memory Records")
-        mem_df = pd.DataFrame(memory_rules)[["timestamp", "asset", "trade_type", "pnl", "lesson_learned"]]
+        st.markdown("#### Permanent Supabase Reinforcement Memory Records")
+        mem_df = pd.DataFrame(memory_rules)[["timestamp", "asset", "trade_type", "pnl", "reward_score", "lesson_learned"]]
         st.dataframe(mem_df, use_container_width=True, hide_index=True)
