@@ -195,7 +195,7 @@ class ApexLiquiditySweepAgent:
         }
 
 # -------------------------------------------------------------
-# 5. WAR ROOM DELIBERATION ENGINE (WITH MTF CONFLUENCE)
+# 5. WAR ROOM DELIBERATION ENGINE (FIXED ATR TARGET & STOP SPACING)
 # -------------------------------------------------------------
 def run_apex_deliberation(asset, data, memory):
     current_time = time.time()
@@ -234,15 +234,28 @@ def run_apex_deliberation(asset, data, memory):
     else:
         decision = "NEUTRAL"
 
-    target_distance = round(atr * 2.0, 2)
-    stop_distance = round(atr * 1.0, 2)
+    # --- PROPER ATR DISTANCE CALCULATION ---
+    # Ensure ATR is at least a minimum fraction of price to avoid zero-division or flat lines
+    safe_atr = max(atr, price * 0.002) 
+    
+    target_distance = round(safe_atr * 2.0, 2)
+    stop_distance = round(safe_atr * 1.0, 2)
 
-    limit_entry = vp_data["poc"] if decision == "BUY_LONG" else (round(price + (atr * 0.2), 2) if decision == "SELL_SHORT" else price)
-    target_price = round(price + target_distance, 2) if decision == "BUY_LONG" else (round(price - target_distance, 2) if decision == "SELL_SHORT" else price)
-    stop_price = round(price - stop_distance, 2) if decision == "BUY_LONG" else (round(price + stop_distance, 2) if decision == "SELL_SHORT" else price)
+    if decision == "BUY_LONG":
+        limit_entry = vp_data["poc"]
+        target_price = round(limit_entry + target_distance, 2)
+        stop_price = round(limit_entry - stop_distance, 2)
+    elif decision == "SELL_SHORT":
+        limit_entry = round(price + (safe_atr * 0.2), 2)
+        target_price = round(limit_entry - target_distance, 2)
+        stop_price = round(limit_entry + stop_distance, 2)
+    else:
+        limit_entry = price
+        target_price = price
+        stop_price = price
 
     result = {
-        "asset": asset, "price": price, "atr": atr, "mtf_trend": mtf_trend, "persona": "SYNTHESIZED_MASTERS_MTF",
+        "asset": asset, "price": price, "atr": safe_atr, "mtf_trend": mtf_trend, "persona": "SYNTHESIZED_MASTERS_MTF",
         "score": final_score, "decision": decision,
         "limit_entry": limit_entry,
         "target_price": target_price,
@@ -253,22 +266,6 @@ def run_apex_deliberation(asset, data, memory):
     
     st.session_state.cached_deliberations[asset] = result
     return result
-
-if time.time() - st.session_state.last_signal_reset > 300:
-    st.session_state.cached_deliberations = {}
-    st.session_state.last_signal_reset = time.time()
-
-deliberations = {asset: run_apex_deliberation(asset, market_snapshot[asset], memory_rules) for asset in market_snapshot}
-
-active_delib = max(deliberations.values(), key=lambda x: abs(x["score"] - 50))
-if len(st.session_state.debate_transcripts) == 0 or st.session_state.debate_transcripts[0]["asset"] != active_delib["asset"]:
-    st.session_state.debate_transcripts.insert(0, {
-        "time": datetime.now().strftime("%H:%M:%S"),
-        "asset": active_delib["asset"], "persona": active_delib["persona"],
-        "score": active_delib["score"], "decision": active_delib["decision"],
-        "bull": active_delib["bull"], "bear": active_delib["bear"],
-        "entry": active_delib["limit_entry"], "target": active_delib["target_price"], "stop": active_delib["stop_price"]
-    })
 
 # -------------------------------------------------------------
 # 6. APEX CLOSED-LOOP EXECUTION & TELEGRAM ALERTS
