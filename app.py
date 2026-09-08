@@ -81,7 +81,6 @@ def fetch_apex_market_data():
             hist = t.history(period="5d", interval="15m")
             if not hist.empty:
                 raw_p = float(hist['Close'].iloc[-1])
-                # Calculate True Range proxy for ATR
                 high_low = hist['High'] - hist['Low']
                 atr = float(high_low.rolling(14).mean().iloc[-1])
                 if pd.isna(atr): atr = raw_p * 0.008
@@ -173,7 +172,7 @@ def run_apex_deliberation(asset, data, memory):
     weighted_score = (ob_data["score"] * 0.40) + (delta_data["score"] * 0.35) + (liq_data["score"] * 0.25)
     final_score = int(max(10, min(95, weighted_score - penalty)))
 
-    # Bi-Directional Decision: LONG, SHORT, or NEUTRAL
+    # Bi-Directional Decision
     if final_score >= 75:
         decision = "BUY_LONG"
     elif final_score <= 25:
@@ -181,16 +180,19 @@ def run_apex_deliberation(asset, data, memory):
     else:
         decision = "NEUTRAL"
 
-    # ATR-Based Dynamic Targets & Stops (Institutional volatility scaling)
     target_distance = round(atr * 2.0, 2)
     stop_distance = round(atr * 1.0, 2)
+
+    limit_entry = ob_data["support"] if decision == "BUY_LONG" else (ob_data["resistance"] if decision == "SELL_SHORT" else price)
+    target_price = round(price + target_distance, 2) if decision == "BUY_LONG" else (round(price - target_distance, 2) if decision == "SELL_SHORT" else price)
+    stop_price = round(price - stop_distance, 2) if decision == "BUY_LONG" else (round(price + stop_distance, 2) if decision == "SELL_SHORT" else price)
 
     result = {
         "asset": asset, "price": price, "atr": atr, "persona": "APEX_ORDER_BLOCK_ENGINE",
         "score": final_score, "decision": decision,
-        "limit_entry": ob_data["support"] if decision == "BUY_LONG" else ob_data["resistance"],
-        "target_price": round(price + target_distance, 2) if decision == "BUY_LONG" else round(price - target_distance, 2),
-        "stop_price": round(price - stop_distance, 2) if decision == "BUY_LONG" else round(price + stop_distance, 2),
+        "limit_entry": limit_entry,
+        "target_price": target_price,
+        "stop_price": stop_price,
         "ob": ob_data["msg"], "delta": delta_data["msg"], "liq": liq_data["msg"],
         "bull": f"BULL APEX: {ob_data['msg']}.", "bear": f"BEAR APEX: Liquidity status {liq_data['msg']}."
     }
@@ -215,7 +217,7 @@ if len(st.session_state.debate_transcripts) == 0 or st.session_state.debate_tran
     })
 
 # -------------------------------------------------------------
-# 6. APEX CLOSED-LOOP EXECUTION (LIMIT ORDER & ATR STOPS)
+# 6. APEX CLOSED-LOOP EXECUTION (SAFE FILTERED TRADES)
 # -------------------------------------------------------------
 def execute_apex_trades(delibrations_dict):
     res = supabase.table("agent_portfolio").select("*").eq("agent_id", "Umbrella_Apex_Fund").execute()
@@ -233,7 +235,7 @@ def execute_apex_trades(delibrations_dict):
     pos = fund.get("current_position")
     trades_today = fund.get("trades_today", 0)
 
-    # 1. EVALUATE EXISTING OPEN POSITION (ATR TARGET / STOP)
+    # 1. EVALUATE EXISTING OPEN POSITION
     if pos is not None:
         held_asset = pos["asset"]
         entry_price = float(pos["entry_price"])
@@ -255,13 +257,12 @@ def execute_apex_trades(delibrations_dict):
                 exit_triggered, exit_reason = True, f"ATR Profit Target Hit (${target_p})"
             elif current_p <= stop_p:
                 exit_triggered, exit_reason = True, f"ATR Stop Loss Hit (${stop_p})"
-        else: # SHORT
+        else:
             if current_p <= target_p:
                 exit_triggered, exit_reason = True, f"ATR Short Target Hit (${target_p})"
             elif current_p >= stop_p:
                 exit_triggered, exit_reason = True, f"ATR Short Stop Hit (${stop_p})"
 
-        # Stagnation release fallback
         if trade_duration_minutes >= 15.0 and -0.3 < pnl_pct < 0.5:
             exit_triggered, exit_reason = True, f"Stagnation Release (Held {trade_duration_minutes:.1f}m)"
 
@@ -284,24 +285,26 @@ def execute_apex_trades(delibrations_dict):
                 "size": units, "price": current_p, "pnl": realized_pnl, "trade_num": trades_today + 1
             }).execute()
 
-    # 2. ENTER NEW POSITION VIA ORDER-BLOCK LIMIT PRECISION
+    # 2. ENTER NEW POSITION (STRICT ACTION FILTER TO PREVENT NEUTRAL ERRORS)
     elif pos is None and trades_today < 12:
-        best_candidate = max(delibrations_dict.values(), key=lambda x: abs(x["score"] - 50))
-        if best_candidate["score"] >= 76 or best_candidate["score"] <= 24:
-            entry_asset = best_candidate["asset"]
-            decision = best_candidate["decision"]
-            pos_type = "LONG" if decision == "BUY_LONG" else "SHORT"
-            limit_entry = best_candidate["limit_entry"]
-            
-            units = round((cash * 0.95) / limit_entry, 4)
-            new_pos = {
-                "asset": entry_asset, "entry_price": limit_entry, "units": units,
-                "type": pos_type, "persona": best_candidate["persona"],
-                "target_price": best_candidate["target_price"], "stop_price": best_candidate["stop_price"],
-                "entry_timestamp": time.time()
-            }
-            supabase.table("agent_portfolio").update({"cash": round(cash * 0.05, 2), "current_position": new_pos, "trades_today": trades_today + 1}).eq("agent_id", "Umbrella_Apex_Fund").execute()
-            supabase.table("trade_ledger_history").insert({"agent_id": "Umbrella_Apex_Fund", "asset": entry_asset, "action": f"LIMIT_{pos_type}_{entry_asset}", "size": units, "price": limit_entry, "pnl": 0.0, "trade_num": trades_today + 1}).execute()
+        valid_candidates = [d for d in delibrations_dict.values() if d["decision"] in ["BUY_LONG", "SELL_SHORT"]]
+        if valid_candidates:
+            best_candidate = max(valid_candidates, key=lambda x: abs(x["score"] - 50))
+            if best_candidate["score"] >= 75 or best_candidate["score"] <= 25:
+                entry_asset = best_candidate["asset"]
+                decision = best_candidate["decision"]
+                pos_type = "LONG" if decision == "BUY_LONG" else "SHORT"
+                limit_entry = best_candidate["limit_entry"]
+                
+                units = round((cash * 0.95) / limit_entry, 4)
+                new_pos = {
+                    "asset": entry_asset, "entry_price": limit_entry, "units": units,
+                    "type": pos_type, "persona": best_candidate["persona"],
+                    "target_price": best_candidate["target_price"], "stop_price": best_candidate["stop_price"],
+                    "entry_timestamp": time.time()
+                }
+                supabase.table("agent_portfolio").update({"cash": round(cash * 0.05, 2), "current_position": new_pos, "trades_today": trades_today + 1}).eq("agent_id", "Umbrella_Apex_Fund").execute()
+                supabase.table("trade_ledger_history").insert({"agent_id": "Umbrella_Apex_Fund", "asset": entry_asset, "action": f"LIMIT_{pos_type}_{entry_asset}", "size": units, "price": limit_entry, "pnl": 0.0, "trade_num": trades_today + 1}).execute()
 
 execute_apex_trades(deliberations)
 
@@ -396,7 +399,7 @@ with tab_room:
     for idx, (asset_name, delib_data) in enumerate(deliberations.items()):
         col = grid[idx % 2]
         with col:
-            badge = "badge-buy" if delib_data["score"] >= 76 else ("badge-sell" if delib_data["score"] <= 24 else "badge-apex")
+            badge = "badge-buy" if delib_data["score"] >= 75 else ("badge-sell" if delib_data["score"] <= 25 else "badge-apex")
             col.markdown(f"""
             <div class="card">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
