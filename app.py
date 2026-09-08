@@ -78,14 +78,17 @@ if "last_signal_reset" not in st.session_state:
     st.session_state.last_signal_reset = time.time()
 if "price_buffer" not in st.session_state:
     st.session_state.price_buffer = {}
+if "last_price_timestamps" not in st.session_state:
+    st.session_state.last_price_timestamps = {}
 
 # -------------------------------------------------------------
-# 2. MARKET DATA & MTF ENGINE
+# 2. MARKET DATA & STALE-CHECK ENGINE
 # -------------------------------------------------------------
 def fetch_apex_market_data():
     tickers = {"Bitcoin": "BTC-USD", "Ethereum": "ETH-USD", "Gold": "GC=F", "Silver": "SI=F"}
     base_prices = {"Bitcoin": 65000.0, "Ethereum": 3500.0, "Gold": 2740.0, "Silver": 31.50}
     market_data = {}
+    current_time = time.time()
     
     for name, symbol in tickers.items():
         try:
@@ -95,11 +98,13 @@ def fetch_apex_market_data():
             
             if not hist_15m.empty:
                 raw_p = float(hist_15m['Close'].iloc[-1])
+                last_bar_time = hist_15m.index[-1].timestamp()
                 high_low = hist_15m['High'] - hist_15m['Low']
                 atr = float(high_low.rolling(14).mean().iloc[-1])
                 if pd.isna(atr): atr = raw_p * 0.008
             else:
                 raw_p = base_prices[name]
+                last_bar_time = current_time
                 atr = raw_p * 0.008
 
             if not hist_1h.empty and len(hist_1h) >= 3:
@@ -110,6 +115,7 @@ def fetch_apex_market_data():
                 mtf_trend = "NEUTRAL"
         except:
             raw_p = base_prices[name]
+            last_bar_time = current_time
             atr = raw_p * 0.008
             mtf_trend = "NEUTRAL"
         
@@ -117,7 +123,18 @@ def fetch_apex_market_data():
         smoothed_p = round((raw_p * 0.25) + (prev_p * 0.75), 2)
         st.session_state.price_buffer[name] = smoothed_p
         
-        market_data[name] = {"price": smoothed_p, "atr": round(atr, 4), "mtf_trend": mtf_trend}
+        # Check if price is stale (frozen for more than 45 minutes for commodities)
+        is_stale = False
+        if name in ["Gold", "Silver"]:
+            if (current_time - last_bar_time) > 2700: # 45 minutes
+                is_stale = True
+
+        market_data[name] = {
+            "price": smoothed_p, 
+            "atr": round(atr, 4), 
+            "mtf_trend": mtf_trend,
+            "is_stale": is_stale
+        }
         
     return market_data
 
@@ -241,7 +258,7 @@ def run_apex_deliberation(asset, data, memory):
 
     result = {
         "asset": asset, "price": price, "atr": dynamic_atr, "mtf_trend": mtf_trend, "persona": "SYNTHESIZED_MASTERS_MTF",
-        "score": final_score, "decision": decision,
+        "score": final_score, "decision": decision, "is_stale": data.get("is_stale", False),
         "limit_entry": limit_entry, "target_price": target_price, "stop_price": stop_price,
         "vp": vp_data["msg"], "delta": delta_data["msg"], "liq": liq_data["msg"],
         "bull": f"BULL APEX (1H MTF: {mtf_trend}): {vp_data['msg']}.", "bear": f"BEAR APEX (1H MTF: {mtf_trend}): Order flow status {delta_data['msg']}."
@@ -267,7 +284,7 @@ if len(st.session_state.debate_transcripts) == 0 or st.session_state.debate_tran
     })
 
 # -------------------------------------------------------------
-# 4. EXECUTION & TELEGRAM ENGINE
+# 4. EXECUTION & TELEGRAM ENGINE (WITH STALE MARKET GUARD)
 # -------------------------------------------------------------
 def execute_apex_trades(delibrations_dict):
     res = supabase.table("agent_portfolio").select("*").eq("agent_id", "Umbrella_Apex_Fund").execute()
@@ -341,7 +358,8 @@ def execute_apex_trades(delibrations_dict):
             send_telegram_alert(f"🔴 *Position Closed: {pos_type} {held_asset}*\nRealized PnL: `${realized_pnl:,.2f}` ({pnl_pct:+.2f}%)\nReason: {exit_reason}")
 
     elif pos is None and trades_today < 12:
-        valid_candidates = [d for d in delibrations_dict.values() if d["decision"] in ["BUY_LONG", "SELL_SHORT"]]
+        # Filter out assets whose markets are closed / data is stale
+        valid_candidates = [d for d in delibrations_dict.values() if d["decision"] in ["BUY_LONG", "SELL_SHORT"] and not d.get("is_stale", False)]
         if valid_candidates:
             best_candidate = max(valid_candidates, key=lambda x: abs(x["score"] - 50))
             if best_candidate["score"] >= 70 or best_candidate["score"] <= 30:
@@ -374,7 +392,7 @@ st.markdown(f"""
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
     <div>
         <h1 style="margin:0;">🏛️ Umbrella Apex Institutional Engine</h1>
-        <p style="margin:0; color: #94A3B8; font-size: 13px;">MTF Confluence (15m + 1H) • Telegram Webhooks • Synthesized Masters</p>
+        <p style="margin:0; color: #94A3B8; font-size: 13px;">MTF Confluence (15m + 1H) • Stale Market Guards • Telegram Webhooks</p>
     </div>
     <div style="background: #090D16; padding: 8px 16px; border-radius: 8px; border: 1px solid #1E293B;">
         <span style="color: #8B5CF6; font-weight: bold;">⚡ APEX SYSTEM ACTIVE</span>
@@ -385,7 +403,8 @@ st.markdown(f"""
 
 cols = st.columns(4)
 for i, (asset, data) in enumerate(market_snapshot.items()):
-    cols[i].metric(label=f"{asset.upper()} (1H Trend: {data['mtf_trend']})", value=f"${data['price']:,.2f}")
+    stale_tag = " ⚠️ (Market Closed)" if data["is_stale"] else ""
+    cols[i].metric(label=f"{asset.upper()}{stale_tag}", value=f"${data['price']:,.2f}")
 
 st.divider()
 
@@ -440,7 +459,7 @@ with tab_portfolio:
                 </div>
                 """, unsafe_allow_html=True)
             else:
-                st.info("Active Position: 100% Cash / Neutral (Waiting for MTF Volume Profile node touch)")
+                st.info("Active Position: 100% Cash / Neutral (Waiting for active market volume nodes)")
 
     with col_p2:
         st.subheader("📑 Execution Audit Log")
@@ -459,11 +478,12 @@ with tab_room:
             vp_msg = delib_data.get("vp", "Volume profile node analyzed")
             delta_msg = delib_data.get("delta", "Delta flow balanced")
             liq_msg = delib_data.get("liq", "Liquidity status stable")
+            stale_warning = " <span style='color: #EF4444; font-size: 10px;'>[MARKET CLOSED / STALE]</span>" if delib_data.get("is_stale") else ""
             
             col.markdown(f"""
             <div class="card">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <h3 style="margin:0;">{asset_name.upper()}</h3>
+                    <h3 style="margin:0;">{asset_name.upper()} {stale_warning}</h3>
                     <span style="font-size:22px; font-weight:bold; color:#8B5CF6;">{delib_data['score']}%</span>
                 </div>
                 <div style="font-size:11px; color:#94A3B8; margin-bottom:6px;">
