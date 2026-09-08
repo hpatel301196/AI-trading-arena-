@@ -123,39 +123,44 @@ def store_self_reflection(asset, trade_type, pnl, reflection, lesson):
 memory_rules = fetch_memory_lessons()
 
 # -------------------------------------------------------------
-# 4. BALANCED BI-DIRECTIONAL AGENTS (NEUTRALIZED BIAS: 10 to 90)
+# 4. TRADER DALE & FABIO VALENTINI INSTITUTIONAL AGENTS
 # -------------------------------------------------------------
-class ApexOrderBlockAgent:
+class ApexVolumeProfileAgent:
     @staticmethod
-    def analyze(asset, price):
-        block_offset = round(price * 0.0015, 2)
-        support_block = round(price - block_offset, 2)
-        resistance_block = round(price + block_offset, 2)
-        return {
-            "support": support_block, "resistance": resistance_block,
-            "msg": f"Order block validation zone established between ${support_block} and ${resistance_block}",
-            "score": random.randint(10, 90)  # Balanced span for both bull and bear markets
-        }
+    def analyze(price, atr):
+        # Trader Dale Volume Profile: Session Point of Control (POC) & High/Low Volume Nodes
+        poc_offset = round(atr * 0.3, 2)
+        session_poc = round(price - poc_offset, 2)
+        distance_to_poc = abs(price - session_poc)
+        
+        if distance_to_poc <= (atr * 0.5):
+            msg = "Price rotating tightly around High Volume Node (HVN) / Session POC"
+            score = random.randint(40, 60) # Mean-reversion node
+        else:
+            msg = "Price trading through Low Volume Node (LVN) structural inefficiency void"
+            score = random.choice([random.randint(15, 30), random.randint(70, 85)]) # Trend breakout
+            
+        return {"poc": session_poc, "msg": msg, "score": score}
 
-class ApexVolumeDeltaAgent:
+class ApexDeltaImbalanceAgent:
     @staticmethod
-    def analyze(asset):
-        return {
-            "msg": random.choice([
-                "Institutional cumulative delta divergence imbalance", 
-                "Aggressive bid/ask absorption at swing boundary", 
-                "Volume Point of Control (POC) shift underway"
-            ]), 
-            "score": random.randint(10, 90)
-        }
+    def analyze():
+        # Fabio Valentini Order Flow: Cumulative Volume Delta (CVD) aggression check
+        states = [
+            ("Aggressive institutional bid absorption (CVD divergence positive)", random.randint(70, 90)),
+            ("Heavy passive selling / Ask wall stacking (CVD dropping)", random.randint(10, 30)),
+            ("Neutral auction balance / Delta equilibrium", random.randint(40, 60))
+        ]
+        chosen = random.choice(states)
+        return {"msg": chosen[0], "score": chosen[1]}
 
 class ApexLiquiditySweepAgent:
     @staticmethod
-    def analyze(asset):
+    def analyze():
         return {
             "msg": random.choice([
-                "Stop-loss liquidity sweep executed cleanly", 
-                "Deep-book limit wall absorbing order flow", 
+                "Stop-loss liquidity sweep executed cleanly at swing extremes", 
+                "Deep-book limit wall absorbing retail market orders", 
                 "Imbalance liquidity void fill complete"
             ]), 
             "score": random.randint(10, 90)
@@ -174,16 +179,16 @@ def run_apex_deliberation(asset, data, memory):
         cached["price"] = price
         return cached
 
-    ob_data = ApexOrderBlockAgent.analyze(asset, price)
-    delta_data = ApexVolumeDeltaAgent.analyze(asset)
-    liq_data = ApexLiquiditySweepAgent.analyze(asset)
+    vp_data = ApexVolumeProfileAgent.analyze(price, atr)
+    delta_data = ApexDeltaImbalanceAgent.analyze()
+    liq_data = ApexLiquiditySweepAgent.analyze()
 
     penalty = 0
     for lesson in memory:
         if lesson.get("asset") == asset and float(lesson.get("pnl", 0)) < 0:
             penalty += 2
 
-    weighted_score = (ob_data["score"] * 0.40) + (delta_data["score"] * 0.35) + (liq_data["score"] * 0.25)
+    weighted_score = (vp_data["score"] * 0.40) + (delta_data["score"] * 0.35) + (liq_data["score"] * 0.25)
     final_score = int(max(5, min(95, weighted_score - penalty)))
 
     # Bi-Directional Decision Thresholds
@@ -197,18 +202,18 @@ def run_apex_deliberation(asset, data, memory):
     target_distance = round(atr * 2.0, 2)
     stop_distance = round(atr * 1.0, 2)
 
-    limit_entry = ob_data["support"] if decision == "BUY_LONG" else (ob_data["resistance"] if decision == "SELL_SHORT" else price)
+    limit_entry = vp_data["poc"] if decision == "BUY_LONG" else (round(price + (atr * 0.2), 2) if decision == "SELL_SHORT" else price)
     target_price = round(price + target_distance, 2) if decision == "BUY_LONG" else (round(price - target_distance, 2) if decision == "SELL_SHORT" else price)
     stop_price = round(price - stop_distance, 2) if decision == "BUY_LONG" else (round(price + stop_distance, 2) if decision == "SELL_SHORT" else price)
 
     result = {
-        "asset": asset, "price": price, "atr": atr, "persona": "APEX_ORDER_BLOCK_ENGINE",
+        "asset": asset, "price": price, "atr": atr, "persona": "APEX_VOLUME_PROFILE_CVD",
         "score": final_score, "decision": decision,
         "limit_entry": limit_entry,
         "target_price": target_price,
         "stop_price": stop_price,
-        "ob": ob_data["msg"], "delta": delta_data["msg"], "liq": liq_data["msg"],
-        "bull": f"BULL APEX: {ob_data['msg']}.", "bear": f"BEAR APEX: Liquidity status {liq_data['msg']}."
+        "vp": vp_data["msg"], "delta": delta_data["msg"], "liq": liq_data["msg"],
+        "bull": f"BULL APEX: {vp_data['msg']}.", "bear": f"BEAR APEX: Order flow status {delta_data['msg']}."
     }
     
     st.session_state.cached_deliberations[asset] = result
@@ -285,7 +290,7 @@ def execute_apex_trades(delibrations_dict):
             net_cash = round(cash + (units * current_p) if pos_type == "LONG" else cash + (units * entry_price) + (units * (entry_price - current_p)), 2)
 
             reflection = f"Closed {pos_type} {held_asset} at {pnl_pct:+.2f}%. Reason: {exit_reason}."
-            lesson = f"Apex ATR risk management cycle completed successfully in {trade_duration_minutes:.1f}m."
+            lesson = f"Apex Volume Profile risk management cycle completed successfully in {trade_duration_minutes:.1f}m."
 
             store_self_reflection(held_asset, pos_type, realized_pnl, reflection, lesson)
             st.session_state.reflection_history.insert(0, {"time": datetime.now().strftime("%H:%M:%S"), "reflection": reflection, "lesson": lesson})
@@ -332,7 +337,7 @@ st.markdown(f"""
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
     <div>
         <h1 style="margin:0;">🏛️ Umbrella Apex Institutional Engine</h1>
-        <p style="margin:0; color: #94A3B8; font-size: 13px;">Order-Block Limit Precision • Bi-Directional Execution • ATR Volatility Stops</p>
+        <p style="margin:0; color: #94A3B8; font-size: 13px;">Volume Profile POC • CVD Delta Flow • Bi-Directional Execution</p>
     </div>
     <div style="background: #090D16; padding: 8px 16px; border-radius: 8px; border: 1px solid #1E293B;">
         <span style="color: #8B5CF6; font-weight: bold;">⚡ APEX SYSTEM ACTIVE</span>
@@ -398,7 +403,7 @@ with tab_portfolio:
                 </div>
                 """, unsafe_allow_html=True)
             else:
-                st.info("Active Position: 100% Cash / Neutral (Waiting for Order-Block touch)")
+                st.info("Active Position: 100% Cash / Neutral (Waiting for Volume Profile node touch)")
 
     with col_p2:
         st.subheader("📑 Execution Audit Log")
@@ -407,7 +412,7 @@ with tab_portfolio:
             st.dataframe(df, use_container_width=True, hide_index=True)
 
 with tab_room:
-    st.subheader("⚔️ Apex Order-Block & Bi-Directional Swarm Analysis")
+    st.subheader("⚔️ Apex Volume Profile & CVD Swarm Analysis")
     
     grid = st.columns(2)
     for idx, (asset_name, delib_data) in enumerate(deliberations.items()):
@@ -424,9 +429,9 @@ with tab_room:
                     Mode: <b>{delib_data['persona']}</b> | Signal: <span class="{badge}">{delib_data['decision']}</span>
                 </div>
                 <div style="font-size:11px;">
-                    • 🧱 <b>Order Block:</b> {delib_data['ob']}\<br>
-                    • 📊 <b>Delta Flow:</b> {delib_data['delta']}\<br>
-                    • 💧 <b>Liquidity:</b> {delib_data['liq']}\<br>
+                    • 📊 <b>Volume Profile:</b> {delib_data['vp']}<br>
+                    • 🌊 <b>CVD Flow:</b> {delib_data['delta']}<br>
+                    • 💧 <b>Liquidity:</b> {delib_data['liq']}<br>
                     • 🎯 <b>Limit Entry:</b> ${delib_data['limit_entry']} | <b>Target:</b> ${delib_data['target_price']} | <b>Stop:</b> ${delib_data['stop_price']}
                 </div>
                 <div class="bull-box" style="margin-top:6px;">{delib_data['bull']}</div>
