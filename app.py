@@ -128,24 +128,22 @@ memory_rules = fetch_memory_lessons()
 class ApexVolumeProfileAgent:
     @staticmethod
     def analyze(price, atr):
-        # Trader Dale Volume Profile: Session Point of Control (POC) & High/Low Volume Nodes
         poc_offset = round(atr * 0.3, 2)
         session_poc = round(price - poc_offset, 2)
         distance_to_poc = abs(price - session_poc)
         
         if distance_to_poc <= (atr * 0.5):
             msg = "Price rotating tightly around High Volume Node (HVN) / Session POC"
-            score = random.randint(40, 60) # Mean-reversion node
+            score = random.randint(40, 60)
         else:
             msg = "Price trading through Low Volume Node (LVN) structural inefficiency void"
-            score = random.choice([random.randint(15, 30), random.randint(70, 85)]) # Trend breakout
+            score = random.choice([random.randint(15, 30), random.randint(70, 85)])
             
         return {"poc": session_poc, "msg": msg, "score": score}
 
 class ApexDeltaImbalanceAgent:
     @staticmethod
     def analyze():
-        # Fabio Valentini Order Flow: Cumulative Volume Delta (CVD) aggression check
         states = [
             ("Aggressive institutional bid absorption (CVD divergence positive)", random.randint(70, 90)),
             ("Heavy passive selling / Ask wall stacking (CVD dropping)", random.randint(10, 30)),
@@ -191,7 +189,6 @@ def run_apex_deliberation(asset, data, memory):
     weighted_score = (vp_data["score"] * 0.40) + (delta_data["score"] * 0.35) + (liq_data["score"] * 0.25)
     final_score = int(max(5, min(95, weighted_score - penalty)))
 
-    # Bi-Directional Decision Thresholds
     if final_score >= 75:
         decision = "BUY_LONG"
     elif final_score <= 25:
@@ -254,7 +251,6 @@ def execute_apex_trades(delibrations_dict):
     pos = fund.get("current_position")
     trades_today = fund.get("trades_today", 0)
 
-    # 1. EVALUATE EXISTING OPEN POSITION
     if pos is not None:
         held_asset = pos["asset"]
         entry_price = float(pos["entry_price"])
@@ -304,7 +300,6 @@ def execute_apex_trades(delibrations_dict):
                 "size": units, "price": current_p, "pnl": realized_pnl, "trade_num": trades_today + 1
             }).execute()
 
-    # 2. ENTER NEW POSITION (STRICT BI-DIRECTIONAL FILTER)
     elif pos is None and trades_today < 12:
         valid_candidates = [d for d in delibrations_dict.values() if d["decision"] in ["BUY_LONG", "SELL_SHORT"]]
         if valid_candidates:
@@ -419,6 +414,11 @@ with tab_room:
         col = grid[idx % 2]
         with col:
             badge = "badge-buy" if delib_data["score"] >= 75 else ("badge-sell" if delib_data["score"] <= 25 else "badge-apex")
+            # Safe fallbacks using .get() to prevent KeyError if old session cache entries exist
+            vp_msg = delib_data.get("vp", delib_data.get("ob", "Volume profile node analyzed"))
+            delta_msg = delib_data.get("delta", "Delta flow balanced")
+            liq_msg = delib_data.get("liq", "Liquidity status stable")
+            
             col.markdown(f"""
             <div class="card">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -429,9 +429,9 @@ with tab_room:
                     Mode: <b>{delib_data['persona']}</b> | Signal: <span class="{badge}">{delib_data['decision']}</span>
                 </div>
                 <div style="font-size:11px;">
-                    • 📊 <b>Volume Profile:</b> {delib_data['vp']}<br>
-                    • 🌊 <b>CVD Flow:</b> {delib_data['delta']}<br>
-                    • 💧 <b>Liquidity:</b> {delib_data['liq']}<br>
+                    • 📊 <b>Volume Profile:</b> {vp_msg}<br>
+                    • 🌊 <b>CVD Flow:</b> {delta_msg}<br>
+                    • 💧 <b>Liquidity:</b> {liq_msg}<br>
                     • 🎯 <b>Limit Entry:</b> ${delib_data['limit_entry']} | <b>Target:</b> ${delib_data['target_price']} | <b>Stop:</b> ${delib_data['stop_price']}
                 </div>
                 <div class="bull-box" style="margin-top:6px;">{delib_data['bull']}</div>
