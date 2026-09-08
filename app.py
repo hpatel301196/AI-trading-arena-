@@ -123,7 +123,7 @@ def store_self_reflection(asset, trade_type, pnl, reflection, lesson):
 memory_rules = fetch_memory_lessons()
 
 # -------------------------------------------------------------
-# 4. ADVANCED ORDER-BLOCK & BI-DIRECTIONAL AGENTS
+# 4. BALANCED BI-DIRECTIONAL AGENTS (NEUTRALIZED BIAS: 10 to 90)
 # -------------------------------------------------------------
 class ApexOrderBlockAgent:
     @staticmethod
@@ -134,18 +134,32 @@ class ApexOrderBlockAgent:
         return {
             "support": support_block, "resistance": resistance_block,
             "msg": f"Order block validation zone established between ${support_block} and ${resistance_block}",
-            "score": random.randint(55, 95)
+            "score": random.randint(10, 90)  # Balanced span for both bull and bear markets
         }
 
 class ApexVolumeDeltaAgent:
     @staticmethod
     def analyze(asset):
-        return {"msg": random.choice(["Institutional cumulative delta positive divergence", "Aggressive bid absorption at local swing low", "Volume POC migration upward"]), "score": random.randint(50, 92)}
+        return {
+            "msg": random.choice([
+                "Institutional cumulative delta divergence imbalance", 
+                "Aggressive bid/ask absorption at swing boundary", 
+                "Volume Point of Control (POC) shift underway"
+            ]), 
+            "score": random.randint(10, 90)
+        }
 
 class ApexLiquiditySweepAgent:
     @staticmethod
     def analyze(asset):
-        return {"msg": random.choice(["Stop-loss liquidity sweep executed cleanly", "Deep-book limit wall absorbing retail selling", "Imbalance void fill complete"]), "score": random.randint(48, 90)}
+        return {
+            "msg": random.choice([
+                "Stop-loss liquidity sweep executed cleanly", 
+                "Deep-book limit wall absorbing order flow", 
+                "Imbalance liquidity void fill complete"
+            ]), 
+            "score": random.randint(10, 90)
+        }
 
 # -------------------------------------------------------------
 # 5. WAR ROOM BI-DIRECTIONAL DELIBERATION ENGINE
@@ -170,9 +184,9 @@ def run_apex_deliberation(asset, data, memory):
             penalty += 2
 
     weighted_score = (ob_data["score"] * 0.40) + (delta_data["score"] * 0.35) + (liq_data["score"] * 0.25)
-    final_score = int(max(10, min(95, weighted_score - penalty)))
+    final_score = int(max(5, min(95, weighted_score - penalty)))
 
-    # Bi-Directional Decision
+    # Bi-Directional Decision Thresholds
     if final_score >= 75:
         decision = "BUY_LONG"
     elif final_score <= 25:
@@ -285,7 +299,7 @@ def execute_apex_trades(delibrations_dict):
                 "size": units, "price": current_p, "pnl": realized_pnl, "trade_num": trades_today + 1
             }).execute()
 
-    # 2. ENTER NEW POSITION (STRICT ACTION FILTER TO PREVENT NEUTRAL ERRORS)
+    # 2. ENTER NEW POSITION (STRICT BI-DIRECTIONAL FILTER)
     elif pos is None and trades_today < 12:
         valid_candidates = [d for d in delibrations_dict.values() if d["decision"] in ["BUY_LONG", "SELL_SHORT"]]
         if valid_candidates:
