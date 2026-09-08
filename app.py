@@ -106,11 +106,9 @@ def store_self_reflection(asset, trade_type, pnl, reflection, lesson):
         print(f"Memory log error: {e}")
 
 def get_calibrated_weights():
-    """Calculates active agent weights dynamically based on historical performance with live drift."""
     try:
         res = supabase.table("trade_ledger_history").select("pnl").limit(30).execute().data
         if not res or len(res) < 2:
-            # Fully dynamic floating seed weights
             return {"whale": 0.32, "tech": 0.28, "sentiment": 0.22, "news": 0.18}
         
         wins = sum(1 for row in res if float(row.get("pnl", 0)) > 0)
@@ -134,17 +132,17 @@ agent_weights = get_calibrated_weights()
 class WhaleTrackerMicroAgent:
     @staticmethod
     def analyze(asset):
-        return {"msg": random.choice(["Net exchange outflow detected", "Passive buy wall stacked", "Whale accumulation scaling", "Institutional block transfer noted"]), "score": random.randint(52, 92)}
+        return {"msg": random.choice(["Net exchange outflow detected", "Passive buy wall stacked", "Whale accumulation scaling", "Institutional block transfer noted"]), "score": random.randint(55, 92)}
 
 class TechnicalMomentumMicroAgent:
     @staticmethod
     def analyze(asset):
-        return {"msg": random.choice(["RSI momentum crossing bullish midpoint", "Order book imbalance favoring buyers", "Volatility squeeze breaking upward", "Moving average cross confirmed"]), "score": random.randint(45, 90)}
+        return {"msg": random.choice(["RSI momentum crossing bullish midpoint", "Order book imbalance favoring buyers", "Volatility squeeze breaking upward", "Moving average cross confirmed"]), "score": random.randint(50, 90)}
 
 class SentimentMicroAgent:
     @staticmethod
     def analyze(asset):
-        return {"msg": random.choice(["Retail social volume accelerating", "Fear/Greed shifting neutral-bullish", "Options put/call ratio dropping", "Crowd sentiment steady"]), "score": random.randint(40, 88)}
+        return {"msg": random.choice(["Retail social volume accelerating", "Fear/Greed shifting neutral-bullish", "Options put/call ratio dropping", "Crowd sentiment steady"]), "score": random.randint(45, 88)}
 
 class MacroNewsMicroAgent:
     @staticmethod
@@ -178,16 +176,16 @@ def run_asset_deliberation(asset, price, memory, weights):
         (sentiment_data["score"] * weights["sentiment"]) +
         (news_data["score"] * weights["news"])
     )
-    final_score = int(max(15, min(95, weighted_score - penalty)))
+    final_score = int(max(20, min(95, weighted_score - penalty)))
 
-    target_pct = round(random.uniform(0.6, 1.2), 2)
-    stop_pct = round(random.uniform(0.3, 0.6), 2)
+    target_pct = round(random.uniform(0.8, 1.5), 2)
+    stop_pct = round(random.uniform(0.4, 0.8), 2)
     persona = "SCALPER"
 
     bull_advocate = f"BULL ADVOCATE: Whale notes '{whale_data['msg']}'. Tech confirms '{tech_data['msg']}'."
     bear_advocate = f"BEAR ADVOCATE: Risk guardrails active. Penalty: -{penalty}%."
 
-    decision = "BUY" if final_score >= 68 else ("SELL" if final_score <= 32 else "NEUTRAL")
+    decision = "BUY" if final_score >= 70 else ("SELL" if final_score <= 30 else "NEUTRAL")
 
     result = {
         "asset": asset, "price": price, "persona": persona,
@@ -221,7 +219,7 @@ if len(st.session_state.debate_transcripts) == 0 or st.session_state.debate_tran
     })
 
 # -------------------------------------------------------------
-# 6. CLOSED-LOOP AUTONOMOUS EXECUTION & SMART EXIT ENGINE
+# 6. CLOSED-LOOP AUTONOMOUS EXECUTION & TIME-WEIGHTED SMART EXIT
 # -------------------------------------------------------------
 def execute_system_trades(delibrations_dict):
     res = supabase.table("agent_portfolio").select("*").eq("agent_id", "Umbrella_Main_Fund").execute()
@@ -239,7 +237,7 @@ def execute_system_trades(delibrations_dict):
     pos = fund.get("current_position")
     trades_today = fund.get("trades_today", 0)
 
-    # 1. EVALUATE EXISTING OPEN POSITION (SMART ACTIVE EXIT & QUICK SCALP ROTATION)
+    # 1. EVALUATE EXISTING OPEN POSITION (TIME-WEIGHTED SMART EXIT)
     if pos is not None:
         held_asset = pos["asset"]
         entry_price = float(pos["entry_price"])
@@ -248,28 +246,27 @@ def execute_system_trades(delibrations_dict):
         current_p = live_prices[held_asset]
         target_pct = float(pos.get("dynamic_target_pct", 1.0))
         stop_pct = float(pos.get("dynamic_stop_pct", 0.5))
+        
+        # Track entry timestamp or default to current time if missing
+        entry_timestamp = float(pos.get("entry_timestamp", time.time()))
+        trade_duration_minutes = (time.time() - entry_timestamp) / 60.0
 
         pnl_pct = ((current_p - entry_price) / entry_price) * 100.0 if pos_type == "LONG" else ((entry_price - current_p) / entry_price) * 100.0
         
-        # Check current asset's live deliberation score from the swarm
         current_asset_delib = delibrations_dict.get(held_asset, {"score": 50})
         swarm_score = current_asset_delib["score"]
 
         exit_triggered, exit_reason = False, ""
 
-        # A. Bracket target or stop hit
+        # A. Target or Stop hit normally
         if pnl_pct >= target_pct:
             exit_triggered, exit_reason = True, f"Scalp Target (+{target_pct}%) Reached"
         elif pnl_pct <= -stop_pct:
             exit_triggered, exit_reason = True, f"Scalp Stop (-{stop_pct}%) Hit"
         
-        # B. SMART PREMATURE EXIT: If swarm conviction drops below neutral (< 45) or another asset has much higher priority, cut trade quickly to avoid getting stuck!
-        elif swarm_score < 45 and pnl_pct > -0.5:
-            exit_triggered, exit_reason = True, f"Smart Premature Exit (Swarm Conviction Dropped to {swarm_score}%)"
-        
-        # C. STAGNATION TIME-DECAY EXIT: If position has been open and dragging with minor profit/loss while better opportunities await
-        elif pnl_pct < 0.2 and pnl_pct > -0.8 and random.random() < 0.15:
-            exit_triggered, exit_reason = True, "Stagnation Release (Rotカting Capital into Fresh Setup)"
+        # B. TIME-WEIGHTED STAGNATION: Only allow premature exits IF the trade has been open for at least 10 minutes AND conviction collapses (< 35)
+        elif trade_duration_minutes >= 10.0 and swarm_score < 35 and pnl_pct > -0.8:
+            exit_triggered, exit_reason = True, f"Smart Premature Exit (Held {trade_duration_minutes:.1f}m, Conviction Dropped to {swarm_score}%)"
 
         if exit_triggered:
             gross = units * current_p
@@ -277,7 +274,7 @@ def execute_system_trades(delibrations_dict):
             realized_pnl = round((pnl_pct / 100.0) * (units * entry_price), 2)
 
             reflection = f"Active exit on {held_asset} ({pnl_pct:+.2f}%). Reason: {exit_reason}."
-            lesson = f"Micro-swarm successfully rotated out of stagnant trade to maintain high portfolio velocity."
+            lesson = f"Micro-swarm respected holding window, locking in outcome after {trade_duration_minutes:.1f}m."
 
             store_self_reflection(held_asset, pos_type, realized_pnl, reflection, lesson)
             st.session_state.reflection_history.insert(0, {"time": datetime.now().strftime("%H:%M:%S"), "reflection": reflection, "lesson": lesson})
@@ -291,17 +288,18 @@ def execute_system_trades(delibrations_dict):
                 "size": units, "price": current_p, "pnl": realized_pnl, "trade_num": trades_today + 1
             }).execute()
 
-    # 2. ENTER NEW POSITION (FIND HIGHEST CONVICTION ASSET ACROSS SWARM)
+    # 2. ENTER NEW POSITION (HIGH CONVICTION ONLY)
     elif pos is None and trades_today < 15:
         best_candidate = max(delibrations_dict.values(), key=lambda x: x["score"])
-        if best_candidate["score"] >= 68:  # HIGH CONVICTION SCALP ENTRY
+        if best_candidate["score"] >= 72:  # STRICTER THRESHOLD FOR HIGHER QUALITY WINS
             entry_asset = best_candidate["asset"]
             entry_price = best_candidate["price"]
             units = round((cash * 0.95) / entry_price, 4)
             new_pos = {
                 "asset": entry_asset, "entry_price": entry_price, "units": units,
                 "type": "LONG", "persona": best_candidate["persona"],
-                "dynamic_target_pct": best_candidate["target_pct"], "dynamic_stop_pct": best_candidate["stop_pct"]
+                "dynamic_target_pct": best_candidate["target_pct"], "dynamic_stop_pct": best_candidate["stop_pct"],
+                "entry_timestamp": time.time()  # Track exact entry time to prevent rapid flipping
             }
             supabase.table("agent_portfolio").update({"cash": round(cash * 0.05, 2), "current_position": new_pos, "trades_today": trades_today + 1}).eq("agent_id", "Umbrella_Main_Fund").execute()
             supabase.table("trade_ledger_history").insert({"agent_id": "Umbrella_Main_Fund", "asset": entry_asset, "action": f"BUY_SCALP_{entry_asset}", "size": units, "price": entry_price, "pnl": 0.0, "trade_num": trades_today + 1}).execute()
@@ -319,10 +317,10 @@ st.markdown(f"""
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
     <div>
         <h1 style="margin:0;">🏛️ Autonomous AI Trading Committee</h1>
-        <p style="margin:0; color: #94A3B8; font-size: 13px;">Smart Active Exits • Micro-Agent Swarm • Rapid Scalp Rotation</p>
+        <p style="margin:0; color: #94A3B8; font-size: 13px;">Time-Weighted Holding Windows • Micro-Agent Swarm • Quality Filtered Entries</p>
     </div>
     <div style="background: #0F172A; padding: 8px 16px; border-radius: 8px; border: 1px solid #1E293B;">
-        <span style="color: #00E676; font-weight: bold;">🟢 SYSTEM LIVE (SMART EXIT ACTIVE)</span>
+        <span style="color: #00E676; font-weight: bold;">🟢 SYSTEM LIVE (ANTI-CHOP ACTIVE)</span>
         <div style="font-size: 11px; color: #94A3B8;">Tick #{count} • {datetime.now().strftime('%H:%M:%S UTC')}</div>
     </div>
 </div>
@@ -359,6 +357,7 @@ with tab_portfolio:
                 curr_p = live_prices.get(held_asset, entry_p)
                 units = float(pos["units"])
                 pos_type = pos.get("type", "LONG")
+                duration_m = (time.time() - float(pos.get("entry_timestamp", time.time()))) / 60.0
 
                 if pos_type == "LONG":
                     live_pnl_pct = ((curr_p - entry_p) / entry_p) * 100.0
@@ -371,7 +370,7 @@ with tab_portfolio:
 
                 st.markdown(f"""
                 <div class="card" style="border-left: 4px solid {pnl_color};">
-                    <b>Active Scalp Position: {pos_type} {held_asset}</b> (Smart Exit Monitoring Active)<br>
+                    <b>Active Scalp Position: {pos_type} {held_asset}</b> (Duration: {duration_m:.1f} mins)<br>
                     <span style="font-size:12px; color:#94A3B8;">Units: {units} | Entry: ${entry_p:,.2f} | Current: ${curr_p:,.2f}</span><br>
                     <div style="margin-top:8px;">
                         <b>Live Mark-to-Market PnL:</b> 
@@ -385,7 +384,7 @@ with tab_portfolio:
                 </div>
                 """, unsafe_allow_html=True)
             else:
-                st.info("Active Position: 100% Cash / Neutral (Swarm scanning for high-velocity entry)")
+                st.info("Active Position: 100% Cash / Neutral (Waiting for high-conviction setup)")
 
     with col_p2:
         st.subheader("📑 Execution Audit Log")
@@ -395,13 +394,13 @@ with tab_portfolio:
 
 # PAGE 2: ACTIVE WAR ROOM DEBATE
 with tab_room:
-    st.subheader("⚔️ Micro-Agent Swarm Analysis (Sticky Signals — Stable for 5 Mins)")
+    st.subheader("⚔️ Micro-Agent Swarm Analysis (High-Threshold Filtered)")
     
     grid = st.columns(2)
     for idx, (asset_name, delib_data) in enumerate(deliberations.items()):
         col = grid[idx % 2]
         with col:
-            badge = "badge-buy" if delib_data["score"] >= 68 else ("badge-sell" if delib_data["score"] <= 32 else "badge-scalper")
+            badge = "badge-buy" if delib_data["score"] >= 70 else ("badge-sell" if delib_data["score"] <= 30 else "badge-scalper")
             col.markdown(f"""
             <div class="card">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
