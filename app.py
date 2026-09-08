@@ -44,7 +44,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-count = st_autorefresh(interval=15000, limit=10000, key="hp_refresh_v4")
+count = st_autorefresh(interval=15000, limit=10000, key="hp_refresh_v5")
 
 @st.cache_resource
 def init_supabase():
@@ -187,10 +187,9 @@ memory_rules = fetch_memory_ledger()
 reinforcement_bias = get_reinforcement_adjustment()
 
 # -------------------------------------------------------------
-# 3. HYBRID AGENT SUITE: QUANT BACKEND + NAMED TRADER PERSONAS
+# 3. SPECIALIZED QUANT BACKEND & NEWS & TRADER PERSONA SUITE
 # -------------------------------------------------------------
 
-# Quantitative Technical Backend Bots (From v2.8)
 class ApexVolumeProfilePOCAgent:
     @staticmethod
     def analyze(data):
@@ -198,11 +197,11 @@ class ApexVolumeProfilePOCAgent:
         price = data["price"]
         distance_pct = ((price - poc) / poc) * 100.0
         if abs(distance_pct) < 0.3:
-            return {"status": "POC_REJECTION_ZONE", "score": 75, "note": f"Price tightly coupled with POC node (${poc}). Value acceptance likely."}
+            return {"status": "POC_REJECTION_ZONE", "score": 75, "note": f"Price tightly coupled with POC node (${poc}). Value acceptance active."}
         elif distance_pct > 0:
-            return {"status": "ABOVE_VALUE", "score": 55, "note": f"Auction trading above value node POC (${poc}). Premium territory."}
+            return {"status": "ABOVE_VALUE", "score": 55, "note": f"Auction trading above value node POC (${poc}). Premium boundary."}
         else:
-            return {"status": "BELOW_VALUE", "score": 45, "note": f"Auction trading below value node POC (${poc}). Discount territory."}
+            return {"status": "BELOW_VALUE", "score": 45, "note": f"Auction trading below value node POC (${poc}). Discount boundary."}
 
 class ApexWhaleTrackerAgent:
     @staticmethod
@@ -220,29 +219,39 @@ class ApexVolArbAgent:
         if vol_ratio > 1.4:
             return {"mode": "VOLATILITY_EXPANSION", "score": 78, "note": f"Volatility surge ratio at {vol_ratio}x. Breakout protocols engaged."}
         elif vol_ratio < 0.75:
-            return {"mode": "VOLATILITY_COMPRESSION", "score": 40, "note": f"Volatility squeeze condition (Ratio {vol_ratio}x). Mean-reversion grid active."}
+            return {"mode": "VOLATILITY_COMPRESSION", "score": 40, "note": f"Volatility squeeze condition (Ratio {vol_ratio}x). Grid active."}
         else:
             return {"mode": "NORMAL", "score": 50, "note": "Standard volatility channel."}
+
+class ApexNewsAndSentimentSpecialist:
+    @staticmethod
+    def analyze():
+        feeds = [
+            ("News Specialist: Global liquidity flows stable. Sentiment risk index positive.", "CLEAR", 0, "Risk-On Liquidity Confirmed"),
+            ("News Specialist: Central bank rate commentary indicates soft landing bias.", "CLEAR", 0, "Macro Tailwind Active"),
+            ("News Specialist: Supply chain tightening inflation alert! Risk reduction recommended.", "VETO_WARNING", -22, "Inflation Shock Warning"),
+            ("News Specialist: Geopolitical safe-haven flows active. Volatility buffer applied.", "CLEAR", 0, "Safe-Haven Rotation")
+        ]
+        chosen = random.choice(feeds)
+        return {"headline": chosen[0], "status": chosen[1], "penalty": chosen[2], "sentiment": chosen[3]}
 
 class ApexMacroNLPAgent:
     @staticmethod
     def analyze():
         headlines = [
-            ("Macro NLP: Global liquidity flows stable. Sentiment risk index neutral-positive.", "CLEAR", 0),
-            ("Macro NLP: Central bank rate commentary indicates soft landing bias.", "CLEAR", 0),
-            ("Macro NLP: Supply chain tightening inflation alert! Risk reduction recommended.", "VETO_WARNING", -25),
-            ("Macro NLP: Geopolitical safe-haven flows active. Volatility buffer applied.", "CLEAR", 0)
+            "Macro NLP: Order book imbalances show aggressive bids clustering near support.",
+            "Macro NLP: Cross-asset correlation reveals strong institutional risk appetite.",
+            "Macro NLP: Macro economic data releases inline with median estimates."
         ]
-        chosen = random.choice(headlines)
-        return {"headline": chosen[0], "status": chosen[1], "penalty": chosen[2]}
+        return random.choice(headlines)
 
-# Named Expert Trader Personas (Your Custom Specialists)
+# Named Expert Trader Personas
 class TraderDaleAgent:
     @staticmethod
     def comment(data):
         comments = [
             f"Trader Dale: Testing High Volume Node (HVN) at ${data['poc']}. Looking for rejection candle.",
-            f"Trader Dale: Value Area High test. Expecting responsive selling or quick breakout confirmation.",
+            f"Trader Dale: Value Area High test. Expecting responsive selling or breakout confirmation.",
             f"Trader Dale: Low Volume Node (LVN) vacuum. Price will knife through here quickly."
         ]
         return random.choice(comments)
@@ -260,7 +269,7 @@ class FabioValentiniAgent:
 class TraderYushAgent:
     @staticmethod
     def comment(vol_ratio):
-        return f"Trader Yush: Delta expansion speed at {vol_ratio}x velocity. Momentum traders are taking control."
+        return f"Trader Yush: Delta expansion speed at {vol_ratio}x velocity. Momentum traders taking control."
 
 class KeshavTradesAgent:
     @staticmethod
@@ -274,11 +283,11 @@ class KeshavTradesAgent:
 class AndreaCimiAgent:
     @staticmethod
     def comment():
-        return "Andrea Cimi: Risk management parameters verified. Margin utilization is within safe institutional bounds."
+        return "Andrea Cimi: Risk management parameters verified. Margin utilization within safe institutional bounds."
 
 
 # -------------------------------------------------------------
-# 4. WAR ROOM DELIBERATION (HYBRID QUANT + TRADER PERSONAS)
+# 4. WAR ROOM DELIBERATION (BALANCED WEIGHTED SUITE)
 # -------------------------------------------------------------
 def run_hp_deliberation(asset, data, memory):
     current_time = time.time()
@@ -292,11 +301,12 @@ def run_hp_deliberation(asset, data, memory):
         cached["price"] = price
         return cached
 
-    # Run Quantitative Backend Bots
+    # Run Quantitative Backend & News Specialists
     poc_bot = ApexVolumeProfilePOCAgent.analyze(data)
     whale_bot = ApexWhaleTrackerAgent.analyze(vol_ratio)
     vol_bot = ApexVolArbAgent.analyze(vol_ratio)
-    macro_bot = ApexMacroNLPAgent.analyze()
+    news_bot = ApexNewsAndSentimentSpecialist.analyze()
+    macro_nlp_text = ApexMacroNLPAgent.analyze()
 
     # Run Named Trader Personas
     dale_comm = TraderDaleAgent.comment(data)
@@ -305,21 +315,26 @@ def run_hp_deliberation(asset, data, memory):
     keshav_comm = KeshavTradesAgent.comment()
     andrea_comm = AndreaCimiAgent.comment()
 
-    # Reinforcement bias
+    # Balanced Weighted Composite Score Calculation
     learning_adjustment = reinforcement_bias
 
-    # Composite Score from Quant Backend + Reinforcement Learning
-    weighted_score = (poc_bot["score"] * 0.3) + (whale_bot["score"] * 0.3) + (vol_bot["score"] * 0.3) + 50 * 0.1
+    weighted_score = (
+        (poc_bot["score"] * 0.25) + 
+        (whale_bot["score"] * 0.25) + 
+        (vol_bot["score"] * 0.25) + 
+        (50 * 0.15) +
+        ( (50 + news_bot["penalty"]) * 0.10 )
+    )
     
     if mtf_trend == "BULLISH":
-        weighted_score += 6
+        weighted_score += 5
     elif mtf_trend == "BEARISH":
-        weighted_score -= 6
+        weighted_score -= 5
 
-    weighted_score += macro_bot["penalty"] + learning_adjustment
+    weighted_score += learning_adjustment
     final_score = int(max(5, min(95, weighted_score)))
 
-    if macro_bot["status"] == "VETO_WARNING" and abs(final_score - 50) < 25:
+    if news_bot["status"] == "VETO_WARNING" and abs(final_score - 50) < 25:
         decision = "VETOED_FLAT"
     elif final_score >= 68:
         decision = "BUY_LONG"
@@ -347,11 +362,11 @@ def run_hp_deliberation(asset, data, memory):
         "asset": asset, "price": price, "atr": dynamic_atr, "mtf_trend": mtf_trend, "persona": f"HP_HYBRID_{vol_bot['mode']}",
         "score": final_score, "decision": decision, "is_stale": data.get("is_stale", False),
         "limit_entry": limit_entry, "target_price": target_price, "stop_price": stop_price,
-        "poc_note": poc_bot["note"], "whale_note": whale_bot["note"], "macro_note": macro_bot["headline"],
+        "poc_note": poc_bot["note"], "whale_note": whale_bot["note"], "news_note": news_bot["headline"], "macro_nlp": macro_nlp_text,
         "dale": dale_comm, "fabio": fabio_comm, "yush": yush_comm, "keshav": keshav_comm, "andrea": andrea_comm,
         "poc": data.get("poc"),
         "bull": f"Trader Dale & Whale Tracker Consensus: {poc_bot['note']} {whale_bot['note']}",
-        "bear": f"Macro & Volatility Check: {macro_bot['headline']} Reinforcement learning factor: {learning_adjustment:+.1f}."
+        "bear": f"News Sentiment & Volatility Check: {news_bot['headline']} Reinforcement factor: {learning_adjustment:+.1f}."
     }
     
     st.session_state.cached_deliberations[asset] = result
@@ -370,7 +385,7 @@ if len(st.session_state.debate_transcripts) == 0 or st.session_state.debate_tran
         "asset": active_delib["asset"], "persona": active_delib["persona"],
         "score": active_delib["score"], "decision": active_delib["decision"],
         "poc_note": active_delib["poc_note"], "whale_note": active_delib["whale_note"],
-        "dale": active_delib["dale"], "fabio": active_delib["fabio"], "yush": active_delib["yush"],
+        "news_note": active_delib["news_note"], "dale": active_delib["dale"],
         "bull": active_delib["bull"], "bear": active_delib["bear"],
         "entry": active_delib["limit_entry"], "target": active_delib["target_price"], "stop": active_delib["stop_price"]
     })
@@ -430,8 +445,8 @@ def execute_hp_trades(delibrations_dict):
 
             if realized_pnl > 0:
                 reward_score = 100
-                reflection = f"REINFORCEMENT SUCCESS: {pos_type} trade on {held_asset} secured +{pnl_pct:.2f}% profit. POC and Volume Profile models validated."
-                lesson = f"POSITIVE REINFORCEMENT: Volume node acceptance models active and precise. Confidence boosted."
+                reflection = f"REINFORCEMENT SUCCESS: {pos_type} trade on {held_asset} secured +{pnl_pct:.2f}% profit. POC, Whale & News models validated."
+                lesson = f"POSITIVE REINFORCEMENT: Institutional flow models active and precise. Confidence boosted."
             else:
                 reward_score = -50
                 reflection = f"REINFORCEMENT CORRECTION: {pos_type} trade on {held_asset} closed at {pnl_pct:.2f}% loss. Trigger: {exit_reason}."
@@ -489,7 +504,6 @@ st.markdown(f"""
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
     <div>
         <h1 style="margin:0;">⚡ HP Advanced Trading Platform</h1>
-        <p style="margin:0; color: #94A3B8; font-size: 13px;">Quant Backend Bots (Whale, POC, VolArb, Macro NLP) + Named Personas (Dale, Fabio, Yush, Keshav, Andrea)</p>
     </div>
     <div style="background: #090D16; padding: 8px 16px; border-radius: 8px; border: 1px solid #1E293B;">
         <span style="color: #10B981; font-weight: bold;">⚡ 24/7 LIVE STREAM</span>
@@ -559,11 +573,12 @@ with tab_portfolio:
     with col_p2:
         st.subheader("📑 Execution Ledger History")
         if len(trade_ledger) > 0:
-            df = pd.DataFrame(trade_ledger)[["timestamp", "asset", "action", "size", "price", "pnl"]]
-            st.dataframe(df, use_container_width=True, hide_index=True)
+            df = pd.DataFrame(trade_ledger)
+            cols_to_show = [c for c in ["timestamp", "asset", "action", "size", "price", "pnl"] if c in df.columns]
+            st.dataframe(df[cols_to_show], use_container_width=True, hide_index=True)
 
 with tab_room:
-    st.subheader("⚔️ Multi-Agent Intelligence (Quant Bots + Trader Personas)")
+    st.subheader("⚔️ Multi-Agent Intelligence (Specialist Quant Bots + News & Trader Personas)")
     
     grid = st.columns(2)
     for idx, (asset_name, delib_data) in enumerate(deliberations.items()):
@@ -586,10 +601,11 @@ with tab_room:
                     Mode: <b>{delib_data['persona']}</b> | Trend: <b>{delib_data['mtf_trend']}</b>{poc_disp} | Signal: <span class="{badge}">{delib_data['decision']}</span>
                 </div>
                 <div style="font-size:11px;">
-                    <b>Quant Backend Telemetry:</b><br>
-                    • 📊 <b>POC Agent:</b> {delib_data['poc_note']}<br>
-                    • 🐋 <b>Whale Tracker:</b> {delib_data['whale_note']}<br>
-                    • 📰 <b>Macro NLP:</b> {delib_data['macro_note']}<br><br>
+                    <b>Specialist Quant Backend Bots:</b><br>
+                    • 📊 <b>Volume Profile / POC Agent:</b> {delib_data['poc_note']}<br>
+                    • 🐋 <b>Apex Whale Tracker Specialist:</b> {delib_data['whale_note']}<br>
+                    • 📰 <b>News & Sentiment Specialist:</b> {delib_data['news_note']}<br>
+                    • 🌐 <b>Macro NLP Feedback Bot:</b> {delib_data['macro_nlp']}<br><br>
                     <b>Named Trader Personas:</b><br>
                     • 🎩 <b>{delib_data['dale']}</b><br>
                     • 🐋 <b>{delib_data['fabio']}</b><br>
@@ -613,7 +629,7 @@ with tab_transcripts:
                 <span>Composite Score: <b style="color:#8B5CF6;">{t['score']}%</b> ({t['decision']})</span>
             </div>
             <div style="margin-top:10px; font-size:12px; border-left: 2px solid #38BDF8; padding-left: 8px; color: #38BDF8;">
-                <b>Telemetry:</b> POC: {t['poc_note']} | Whale: {t['whale_note']} | Dale: {t['dale']}
+                <b>Telemetry:</b> POC: {t['poc_note']} | Whale: {t['whale_note']} | News: {t['news_note']}
             </div>
             <div style="margin-top:10px; font-size:13px;">
                 <div style="color:#10B981; margin-bottom:6px;">🟢 <b>Consensus Bull Case:</b> {t['bull']}</div>
@@ -639,5 +655,6 @@ with tab_memory:
 
     if len(memory_rules) > 0:
         st.markdown("#### Permanent Supabase Reinforcement Memory Records")
-        mem_df = pd.DataFrame(memory_rules)[["timestamp", "asset", "trade_type", "pnl", "reward_score", "lesson_learned"]]
-        st.dataframe(mem_df, use_container_width=True, hide_index=True)
+        mem_df = pd.DataFrame(memory_rules)
+        mem_cols = [c for c in ["timestamp", "asset", "trade_type", "pnl", "reward_score", "lesson_learned"] if c in mem_df.columns]
+        st.dataframe(mem_df[mem_cols], use_container_width=True, hide_index=True)
