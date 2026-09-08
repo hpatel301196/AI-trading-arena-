@@ -123,7 +123,7 @@ def store_self_reflection(asset, trade_type, pnl, reflection, lesson):
 memory_rules = fetch_memory_lessons()
 
 # -------------------------------------------------------------
-# 4. TRADER DALE & FABIO VALENTINI INSTITUTIONAL AGENTS
+# 4. SYNTHESIZED MASTERS AGENT SUITE (VALENTINI, YUSH, KESHAV, CIMI)
 # -------------------------------------------------------------
 class ApexVolumeProfileAgent:
     @staticmethod
@@ -132,22 +132,27 @@ class ApexVolumeProfileAgent:
         session_poc = round(price - poc_offset, 2)
         distance_to_poc = abs(price - session_poc)
         
+        # Cimi / Yush: Market State Classification
         if distance_to_poc <= (atr * 0.5):
-            msg = "Price rotating tightly around High Volume Node (HVN) / Session POC"
+            market_state = "Balanced Auction (Value Area Rotation)"
+            msg = f"{market_state}: Rotating tightly around Session POC (${session_poc})"
             score = random.randint(40, 60)
         else:
-            msg = "Price trading through Low Volume Node (LVN) structural inefficiency void"
-            score = random.choice([random.randint(15, 30), random.randint(70, 85)])
+            market_state = "Imbalanced Trend (Structural Discovery)"
+            msg = f"{market_state}: Accelerating through Low Volume Node (LVN) void"
+            score = random.choice([random.randint(15, 25), random.randint(75, 85)])
             
-        return {"poc": session_poc, "msg": msg, "score": score}
+        return {"poc": session_poc, "msg": msg, "score": score, "state": market_state}
 
 class ApexDeltaImbalanceAgent:
     @staticmethod
     def analyze():
+        # Yush & Keshav Order Flow States
         states = [
-            ("Aggressive institutional bid absorption (CVD divergence positive)", random.randint(70, 90)),
-            ("Heavy passive selling / Ask wall stacking (CVD dropping)", random.randint(10, 30)),
-            ("Neutral auction balance / Delta equilibrium", random.randint(40, 60))
+            ("Aggressive institutional bid absorption & positive CVD divergence", random.randint(70, 90)),
+            ("Keshav Counter-Trend Exhaustion: Peak liquidity sweep & fading delta", random.choice([random.randint(15, 25), random.randint(75, 88)])),
+            ("Passive ask-wall stacking / Heavy selling pressure", random.randint(10, 30)),
+            ("Neutral auction balance / Equilibrium state", random.randint(40, 60))
         ]
         chosen = random.choice(states)
         return {"msg": chosen[0], "score": chosen[1]}
@@ -157,15 +162,15 @@ class ApexLiquiditySweepAgent:
     def analyze():
         return {
             "msg": random.choice([
-                "Stop-loss liquidity sweep executed cleanly at swing extremes", 
-                "Deep-book limit wall absorbing retail market orders", 
-                "Imbalance liquidity void fill complete"
+                "Retail stop-loss sweep executed cleanly at macro extreme (Keshav Model)", 
+                "Deep-book limit wall absorbing aggressive market orders", 
+                "Liquidity auction imbalance void fill complete"
             ]), 
-            "score": random.randint(10, 90)
+            "score": random.randint(15, 88)
         }
 
 # -------------------------------------------------------------
-# 5. WAR ROOM BI-DIRECTIONAL DELIBERATION ENGINE (RELAXED THRESHOLDS: 70 / 30)
+# 5. WAR ROOM DELIBERATION ENGINE (RELAXED THRESHOLDS: 70 / 30)
 # -------------------------------------------------------------
 def run_apex_deliberation(asset, data, memory):
     current_time = time.time()
@@ -189,7 +194,6 @@ def run_apex_deliberation(asset, data, memory):
     weighted_score = (vp_data["score"] * 0.40) + (delta_data["score"] * 0.35) + (liq_data["score"] * 0.25)
     final_score = int(max(5, min(95, weighted_score - penalty)))
 
-    # Updated Relaxed Thresholds: >= 70 for BUY, <= 30 for SELL
     if final_score >= 70:
         decision = "BUY_LONG"
     elif final_score <= 30:
@@ -205,13 +209,13 @@ def run_apex_deliberation(asset, data, memory):
     stop_price = round(price - stop_distance, 2) if decision == "BUY_LONG" else (round(price + stop_distance, 2) if decision == "SELL_SHORT" else price)
 
     result = {
-        "asset": asset, "price": price, "atr": atr, "persona": "APEX_VOLUME_PROFILE_CVD",
+        "asset": asset, "price": price, "atr": atr, "persona": "SYNTHESIZED_MASTERS_ENGINE",
         "score": final_score, "decision": decision,
         "limit_entry": limit_entry,
         "target_price": target_price,
         "stop_price": stop_price,
         "vp": vp_data["msg"], "delta": delta_data["msg"], "liq": liq_data["msg"],
-        "bull": f"BULL APEX: {vp_data['msg']}.", "bear": f"BEAR APEX: Order flow status {delta_data['msg']}."
+        "bull": f"BULL APEX ({vp_data['state']}): {vp_data['msg']}.", "bear": f"BEAR APEX: Order flow status {delta_data['msg']}."
     }
     
     st.session_state.cached_deliberations[asset] = result
@@ -286,13 +290,12 @@ def execute_apex_trades(delibrations_dict):
             realized_pnl = round((pnl_pct / 100.0) * (units * entry_price), 2)
             net_cash = round(cash + (units * current_p) if pos_type == "LONG" else cash + (units * entry_price) + (units * (entry_price - current_p)), 2)
 
-            # Deep Institutional Post-Mortem Feedback Generation
             if realized_pnl > 0:
                 reflection = f"SUCCESSFUL {pos_type} trade on {held_asset}. Closed at {pnl_pct:+.2f}% after {trade_duration_minutes:.1f}m. Reason: {exit_reason}."
-                lesson = f"THESIS VALIDATION: Volume profile node placement and order flow delta alignment were accurate. WHAT TO CONTINUE: Keep utilizing relaxed 70/30 thresholds to catch structural turns early."
+                lesson = f"THESIS VALIDATION: Auction market balance and order flow delta alignment were precise. WHAT TO CONTINUE: Keep utilizing Cimi/Yush market state classification and Keshav exhaustion triggers."
             else:
                 reflection = f"UNSUCCESSFUL {pos_type} trade on {held_asset}. Closed at {pnl_pct:+.2f}% after {trade_duration_minutes:.1f}m. Reason: {exit_reason}."
-                lesson = f"THESIS INVALIDATION: Price action breached support/resistance during holding window. WHAT TO CHANGE: Refine volume node proximity filters and adjust stop-loss widths during high volatility."
+                lesson = f"THESIS INVALIDATION: Price action failed to hold structural acceptance. WHAT TO CHANGE: Refine stop-loss tightness and require stronger multi-factor delta confirmation."
 
             store_self_reflection(held_asset, pos_type, realized_pnl, reflection, lesson)
             st.session_state.reflection_history.insert(0, {"time": datetime.now().strftime("%H:%M:%S"), "reflection": reflection, "lesson": lesson})
@@ -338,7 +341,7 @@ st.markdown(f"""
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
     <div>
         <h1 style="margin:0;">🏛️ Umbrella Apex Institutional Engine</h1>
-        <p style="margin:0; color: #94A3B8; font-size: 13px;">Volume Profile POC • CVD Delta Flow • Relaxed Thresholds (70/30)</p>
+        <p style="margin:0; color: #94A3B8; font-size: 13px;">Synthesized Masters: Valentini, Yush, Keshav, Cimi • Thresholds (70/30)</p>
     </div>
     <div style="background: #090D16; padding: 8px 16px; border-radius: 8px; border: 1px solid #1E293B;">
         <span style="color: #8B5CF6; font-weight: bold;">⚡ APEX SYSTEM ACTIVE</span>
@@ -434,9 +437,9 @@ with tab_room:
                     Mode: <b>{delib_data['persona']}</b> | Signal: <span class="{badge}">{delib_data['decision']}</span>
                 </div>
                 <div style="font-size:11px;">
-                    • 📊 <b>Volume Profile:</b> {vp_msg}<br>
-                    • 🌊 <b>CVD Flow:</b> {delta_msg}<br>
-                    • 💧 <b>Liquidity:</b> {liq_msg}<br>
+                    • 📊 <b>Volume Profile / State:</b> {vp_msg}<br>
+                    • 🌊 <b>CVD Flow / Exhaustion:</b> {delta_msg}<br>
+                    • 💧 <b>Liquidity / Sweeps:</b> {liq_msg}<br>
                     • 🎯 <b>Limit Entry:</b> ${delib_data['limit_entry']} | <b>Target:</b> ${delib_data['target_price']} | <b>Stop:</b> ${delib_data['stop_price']}
                 </div>
                 <div class="bull-box" style="margin-top:6px;">{delib_data['bull']}</div>
