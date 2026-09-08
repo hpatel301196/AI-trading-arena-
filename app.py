@@ -165,7 +165,7 @@ class ApexLiquiditySweepAgent:
         }
 
 # -------------------------------------------------------------
-# 5. WAR ROOM BI-DIRECTIONAL DELIBERATION ENGINE
+# 5. WAR ROOM BI-DIRECTIONAL DELIBERATION ENGINE (RELAXED THRESHOLDS: 70 / 30)
 # -------------------------------------------------------------
 def run_apex_deliberation(asset, data, memory):
     current_time = time.time()
@@ -189,9 +189,10 @@ def run_apex_deliberation(asset, data, memory):
     weighted_score = (vp_data["score"] * 0.40) + (delta_data["score"] * 0.35) + (liq_data["score"] * 0.25)
     final_score = int(max(5, min(95, weighted_score - penalty)))
 
-    if final_score >= 75:
+    # Updated Relaxed Thresholds: >= 70 for BUY, <= 30 for SELL
+    if final_score >= 70:
         decision = "BUY_LONG"
-    elif final_score <= 25:
+    elif final_score <= 30:
         decision = "SELL_SHORT"
     else:
         decision = "NEUTRAL"
@@ -233,7 +234,7 @@ if len(st.session_state.debate_transcripts) == 0 or st.session_state.debate_tran
     })
 
 # -------------------------------------------------------------
-# 6. APEX CLOSED-LOOP EXECUTION (SAFE FILTERED TRADES)
+# 6. APEX CLOSED-LOOP EXECUTION (DEEP POST-MORTEM REFLECTION)
 # -------------------------------------------------------------
 def execute_apex_trades(delibrations_dict):
     res = supabase.table("agent_portfolio").select("*").eq("agent_id", "Umbrella_Apex_Fund").execute()
@@ -285,8 +286,13 @@ def execute_apex_trades(delibrations_dict):
             realized_pnl = round((pnl_pct / 100.0) * (units * entry_price), 2)
             net_cash = round(cash + (units * current_p) if pos_type == "LONG" else cash + (units * entry_price) + (units * (entry_price - current_p)), 2)
 
-            reflection = f"Closed {pos_type} {held_asset} at {pnl_pct:+.2f}%. Reason: {exit_reason}."
-            lesson = f"Apex Volume Profile risk management cycle completed successfully in {trade_duration_minutes:.1f}m."
+            # Deep Institutional Post-Mortem Feedback Generation
+            if realized_pnl > 0:
+                reflection = f"SUCCESSFUL {pos_type} trade on {held_asset}. Closed at {pnl_pct:+.2f}% after {trade_duration_minutes:.1f}m. Reason: {exit_reason}."
+                lesson = f"THESIS VALIDATION: Volume profile node placement and order flow delta alignment were accurate. WHAT TO CONTINUE: Keep utilizing relaxed 70/30 thresholds to catch structural turns early."
+            else:
+                reflection = f"UNSUCCESSFUL {pos_type} trade on {held_asset}. Closed at {pnl_pct:+.2f}% after {trade_duration_minutes:.1f}m. Reason: {exit_reason}."
+                lesson = f"THESIS INVALIDATION: Price action breached support/resistance during holding window. WHAT TO CHANGE: Refine volume node proximity filters and adjust stop-loss widths during high volatility."
 
             store_self_reflection(held_asset, pos_type, realized_pnl, reflection, lesson)
             st.session_state.reflection_history.insert(0, {"time": datetime.now().strftime("%H:%M:%S"), "reflection": reflection, "lesson": lesson})
@@ -304,7 +310,7 @@ def execute_apex_trades(delibrations_dict):
         valid_candidates = [d for d in delibrations_dict.values() if d["decision"] in ["BUY_LONG", "SELL_SHORT"]]
         if valid_candidates:
             best_candidate = max(valid_candidates, key=lambda x: abs(x["score"] - 50))
-            if best_candidate["score"] >= 75 or best_candidate["score"] <= 25:
+            if best_candidate["score"] >= 70 or best_candidate["score"] <= 30:
                 entry_asset = best_candidate["asset"]
                 decision = best_candidate["decision"]
                 pos_type = "LONG" if decision == "BUY_LONG" else "SHORT"
@@ -332,7 +338,7 @@ st.markdown(f"""
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
     <div>
         <h1 style="margin:0;">🏛️ Umbrella Apex Institutional Engine</h1>
-        <p style="margin:0; color: #94A3B8; font-size: 13px;">Volume Profile POC • CVD Delta Flow • Bi-Directional Execution</p>
+        <p style="margin:0; color: #94A3B8; font-size: 13px;">Volume Profile POC • CVD Delta Flow • Relaxed Thresholds (70/30)</p>
     </div>
     <div style="background: #090D16; padding: 8px 16px; border-radius: 8px; border: 1px solid #1E293B;">
         <span style="color: #8B5CF6; font-weight: bold;">⚡ APEX SYSTEM ACTIVE</span>
@@ -413,8 +419,7 @@ with tab_room:
     for idx, (asset_name, delib_data) in enumerate(deliberations.items()):
         col = grid[idx % 2]
         with col:
-            badge = "badge-buy" if delib_data["score"] >= 75 else ("badge-sell" if delib_data["score"] <= 25 else "badge-apex")
-            # Safe fallbacks using .get() to prevent KeyError if old session cache entries exist
+            badge = "badge-buy" if delib_data["score"] >= 70 else ("badge-sell" if delib_data["score"] <= 30 else "badge-apex")
             vp_msg = delib_data.get("vp", delib_data.get("ob", "Volume profile node analyzed"))
             delta_msg = delib_data.get("delta", "Delta flow balanced")
             liq_msg = delib_data.get("liq", "Liquidity status stable")
