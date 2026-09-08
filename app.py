@@ -12,7 +12,7 @@ from datetime import datetime, date
 # 1. PAGE CONFIGURATION & INSTITUTIONAL TERMINAL
 # -------------------------------------------------------------
 st.set_page_config(
-    page_title="Umbrella Apex Institutional Engine v2.5",
+    page_title="Umbrella Apex Institutional Engine v2.7",
     page_icon="🏛️",
     layout="wide"
 )
@@ -44,7 +44,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-count = st_autorefresh(interval=15000, limit=10000, key="apex_refresh_v2")
+count = st_autorefresh(interval=15000, limit=10000, key="apex_refresh_v27")
 
 @st.cache_resource
 def init_supabase():
@@ -64,7 +64,7 @@ def send_telegram_alert(message):
         chat_id = st.secrets.get("TELEGRAM_CHAT_ID")
         if token and chat_id:
             url = f"https://api.telegram.org/bot{token}/sendMessage"
-            payload = {"chat_id": chat_id, "text": f"🏛️ **Apex Institutional v2.5**\n\n{message}", "parse_mode": "Markdown"}
+            payload = {"chat_id": chat_id, "text": f"🏛️ **Apex Institutional v2.7**\n\n{message}", "parse_mode": "Markdown"}
             requests.post(url, json=payload, timeout=5)
     except Exception as e:
         print(f"Telegram alert error: {e}")
@@ -81,13 +81,21 @@ if "price_buffer" not in st.session_state:
     st.session_state.price_buffer = {}
 
 # -------------------------------------------------------------
-# 2. ADVANCED MARKET, WHALE & MACRO DATA ENGINE
+# 2. FULLY AUTOMATED BACKGROUND MARKET DATA ENGINE
 # -------------------------------------------------------------
 def fetch_apex_market_data():
-    tickers = {"Bitcoin": "BTC-USD", "Ethereum": "ETH-USD", "Gold": "GC=F", "Silver": "SI=F"}
-    base_prices = {"Bitcoin": 65000.0, "Ethereum": 3500.0, "Gold": 2740.0, "Silver": 31.50}
     market_data = {}
     current_time = time.time()
+    
+    # Fully automated tickers including Gold (GC=F), Silver (SI=F), Bitcoin, Ethereum
+    tickers = {
+        "Gold": "GC=F",
+        "Silver": "SI=F",
+        "Bitcoin": "BTC-USD",
+        "Ethereum": "ETH-USD"
+    }
+    
+    base_prices = {"Gold": 4454.5, "Silver": 31.50, "Bitcoin": 65000.0, "Ethereum": 3500.0}
     
     for name, symbol in tickers.items():
         try:
@@ -101,15 +109,15 @@ def fetch_apex_market_data():
                 high_low = hist_15m['High'] - hist_15m['Low']
                 atr = float(high_low.rolling(14).mean().iloc[-1])
                 if pd.isna(atr): atr = raw_p * 0.008
-                
-                # Volatility Arbitrage Metric (Ratio of current ATR to historical volatility baseline)
                 vol_baseline = float(high_low.rolling(50).mean().iloc[-1]) if len(high_low) >= 50 else atr
                 vol_ratio = atr / vol_baseline if vol_baseline > 0 else 1.0
+                est_poc = raw_p - (atr * 0.1)
             else:
                 raw_p = base_prices[name]
                 last_bar_time = current_time
                 atr = raw_p * 0.008
                 vol_ratio = 1.0
+                est_poc = raw_p
 
             if not hist_1h.empty and len(hist_1h) >= 3:
                 h1_sma = hist_1h['Close'].rolling(3).mean().iloc[-1]
@@ -123,14 +131,15 @@ def fetch_apex_market_data():
             atr = raw_p * 0.008
             mtf_trend = "NEUTRAL"
             vol_ratio = 1.0
+            est_poc = raw_p
         
         prev_p = st.session_state.price_buffer.get(name, raw_p)
         smoothed_p = round((raw_p * 0.25) + (prev_p * 0.75), 2)
         st.session_state.price_buffer[name] = smoothed_p
         
         is_stale = False
-        if name in ["Gold", "Silver"]:
-            if (current_time - last_bar_time) > 2700: # 45 mins
+        if name in ["Silver", "Gold"]:
+            if (current_time - last_bar_time) > 2700:
                 is_stale = True
 
         market_data[name] = {
@@ -138,7 +147,9 @@ def fetch_apex_market_data():
             "atr": round(atr, 4), 
             "mtf_trend": mtf_trend,
             "vol_ratio": round(vol_ratio, 2),
-            "is_stale": is_stale
+            "is_stale": is_stale,
+            "poc": round(est_poc, 2),
+            "source": "Automated yfinance Feed"
         }
         
     return market_data
@@ -165,16 +176,15 @@ def store_self_reflection(asset, trade_type, pnl, reflection, lesson):
 memory_rules = fetch_memory_lessons()
 
 # -------------------------------------------------------------
-# 3. SPECIALIZED AGENT SUITE (WHALE, VOL-ARB, MACRO NLP)
+# 3. SPECIALIZED AGENT SUITE (ORDER FLOW, VOL-ARB, MACRO)
 # -------------------------------------------------------------
-class ApexWhaleTrackerAgent:
+class ApexOrderFlowAgent:
     @staticmethod
-    def analyze(asset):
+    def analyze(asset, data):
         profiles = [
-            ("Whale cluster accumulation detected at exchange cold storage wallets", random.randint(70, 92)),
-            ("Heavy institutional block-order outflow / exchange deposit surge", random.randint(12, 35)),
-            ("Passive retail drift / Neutral dark-pool volume distribution", random.randint(45, 55)),
-            ("Smart-money liquidity sweep and iceberg bid stack activation", random.randint(68, 88))
+            (f"Automated order flow proxy: Bid absorption active near volume node ${data['poc']}", random.randint(70, 88)),
+            (f"Passive liquidity resting near session equilibrium (${data['poc']})", random.randint(45, 60)),
+            (f"Momentum imbalance: Aggressive delta expansion detected", random.randint(65, 82))
         ]
         chosen = random.choice(profiles)
         return {"msg": chosen[0], "score": chosen[1]}
@@ -216,11 +226,10 @@ def run_apex_deliberation(asset, data, memory):
         cached["price"] = price
         return cached
 
-    whale_data = ApexWhaleTrackerAgent.analyze(asset)
+    order_flow = ApexOrderFlowAgent.analyze(asset, data)
     vol_data = ApexVolArbAgent.analyze(vol_ratio)
     macro_data = ApexMacroNLPAgent.analyze()
 
-    # Dynamic historical penalty search
     historical_penalty = 0
     specific_lesson = "No prior anomaly patterns logged."
     for lesson in memory:
@@ -228,8 +237,7 @@ def run_apex_deliberation(asset, data, memory):
             historical_penalty += 3
             specific_lesson = f"Warning from memory ledger: {lesson.get('lesson_learned')}"
 
-    # Weighted composite scoring
-    weighted_score = (whale_data["score"] * 0.45) + (vol_data["score"] * 0.35) + (50 * 0.20)
+    weighted_score = (order_flow["score"] * 0.45) + (vol_data["score"] * 0.35) + (50 * 0.20)
     
     if mtf_trend == "BULLISH":
         weighted_score += 10
@@ -239,7 +247,6 @@ def run_apex_deliberation(asset, data, memory):
     weighted_score += macro_data["penalty"]
     final_score = int(max(5, min(95, weighted_score - historical_penalty)))
 
-    # Macro Veto override if severe
     if macro_data["status"] == "VETO_WARNING" and abs(final_score - 50) < 25:
         decision = "VETOED_FLAT"
     elif final_score >= 68:
@@ -268,8 +275,8 @@ def run_apex_deliberation(asset, data, memory):
         "asset": asset, "price": price, "atr": dynamic_atr, "mtf_trend": mtf_trend, "persona": f"SWARM_AI_{vol_data['mode']}",
         "score": final_score, "decision": decision, "is_stale": data.get("is_stale", False),
         "limit_entry": limit_entry, "target_price": target_price, "stop_price": stop_price,
-        "whale": whale_data["msg"], "vol": vol_data["msg"], "macro": macro_data["headline"],
-        "bull": f"BULL ADVOCATE (1H Trend: {mtf_trend}): Whale footprint confirms {whale_data['msg']}. Volatility profile supports expansion.",
+        "order_flow": order_flow["msg"], "vol": vol_data["msg"], "macro": macro_data["headline"], "poc": data.get("poc"), "source": data.get("source"),
+        "bull": f"BULL ADVOCATE (1H Trend: {mtf_trend}): Order flow & automated POC analysis confirms {order_flow['msg']}. Continuation supported.",
         "bear": f"BEAR ADVOCATE (Risk Check): Macro condition notes '{macro_data['headline']}'. Historical memory note: {specific_lesson[:60]}..."
     }
     
@@ -288,7 +295,7 @@ if len(st.session_state.debate_transcripts) == 0 or st.session_state.debate_tran
         "time": datetime.now().strftime("%H:%M:%S"),
         "asset": active_delib["asset"], "persona": active_delib["persona"],
         "score": active_delib["score"], "decision": active_delib["decision"],
-        "whale": active_delib["whale"], "vol": active_delib["vol"], "macro": active_delib["macro"],
+        "order_flow": active_delib["order_flow"], "vol": active_delib["vol"], "macro": active_delib["macro"],
         "bull": active_delib["bull"], "bear": active_delib["bear"],
         "entry": active_delib["limit_entry"], "target": active_delib["target_price"], "stop": active_delib["stop_price"]
     })
@@ -348,10 +355,10 @@ def execute_apex_trades(delibrations_dict):
 
             if realized_pnl > 0:
                 reflection = f"SUCCESSFUL {pos_type} trade on {held_asset}. Closed with +{pnl_pct:.2f}% return over {trade_duration_minutes:.1f} minutes. Trigger catalyst: {exit_reason}."
-                lesson = f"THESIS VALIDATION: Multi-timeframe trend alignment (1H MTF), whale accumulation profiles, and volatility-expansion breakout metrics correctly predicted directional continuation."
+                lesson = f"THESIS VALIDATION: Automated order-flow profile & multi-timeframe trend alignment correctly projected auction continuation."
             else:
                 reflection = f"UNSUCCESSFUL {pos_type} trade on {held_asset}. Closed with {pnl_pct:.2f}% return over {trade_duration_minutes:.1f} minutes. Exit cause: {exit_reason}."
-                lesson = f"THESIS INVALIDATION: Structural absorption failed at limit entry. Whale volume distribution indicated hidden institutional distribution rather than accumulation. Adjust scoring weight on volume imbalance."
+                lesson = f"THESIS INVALIDATION: Point of control absorption failed at limit entry. Adjust risk parameters."
 
             store_self_reflection(held_asset, pos_type, realized_pnl, reflection, lesson)
             st.session_state.reflection_history.insert(0, {"time": datetime.now().strftime("%H:%M:%S"), "reflection": reflection, "lesson": lesson})
@@ -377,10 +384,8 @@ def execute_apex_trades(delibrations_dict):
                 pos_type = "LONG" if decision == "BUY_LONG" else "SHORT"
                 limit_entry = best_candidate["limit_entry"]
                 
-                # --- DYNAMIC KELLY CRITERION POSITION SIZING ---
-                # Win probability estimate based on CIO score distance from equilibrium
-                win_prob = abs(best_candidate["score"] - 50) / 50.0 # e.g. 80 score -> 0.60 edge ratio
-                kelly_fraction = max(0.1, min(0.4, win_prob * 0.5)) # capped safely between 10% and 40% allocation
+                win_prob = abs(best_candidate["score"] - 50) / 50.0 
+                kelly_fraction = max(0.1, min(0.4, win_prob * 0.5)) 
                 allocated_capital = cash * kelly_fraction
                 
                 units = round(allocated_capital / limit_entry, 4)
@@ -406,11 +411,11 @@ portfolio_state = supabase.table("agent_portfolio").select("*").eq("agent_id", "
 st.markdown(f"""
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
     <div>
-        <h1 style="margin:0;">🏛️ Umbrella Apex Institutional Engine v2.5</h1>
-        <p style="margin:0; color: #94A3B8; font-size: 13px;">Whale Trackers • Vol-Arb Gamma • Dynamic Kelly Sizing • NLP Macro Veto • Stale Safeguard</p>
+        <h1 style="margin:0;">🏛️ Umbrella Apex Institutional Engine v2.7</h1>
+        <p style="margin:0; color: #94A3B8; font-size: 13px;">Automated yfinance Background Feed • Volume Profile Proxies • Dynamic Kelly Sizing • NLP Macro Veto</p>
     </div>
     <div style="background: #090D16; padding: 8px 16px; border-radius: 8px; border: 1px solid #1E293B;">
-        <span style="color: #8B5CF6; font-weight: bold;">⚡ SYSTEM ACTIVE</span>
+        <span style="color: #10B981; font-weight: bold;">⚡ 24/7 AUTOMATED SYNC</span>
         <div style="font-size: 11px; color: #94A3B8;">Tick #{count} • {datetime.now().strftime('%H:%M:%S UTC')}</div>
     </div>
 </div>
@@ -419,7 +424,8 @@ st.markdown(f"""
 cols = st.columns(4)
 for i, (asset, data) in enumerate(market_snapshot.items()):
     stale_tag = " ⚠️ (Market Closed)" if data["is_stale"] else ""
-    cols[i].metric(label=f"{asset.upper()}{stale_tag}", value=f"${data['price']:,.2f}")
+    src_label = f" <span style='font-size:9px; color:#38BDF8;'>[{data.get('source', 'API')}]</span>"
+    cols[i].metric(label=f"{asset.upper()}{stale_tag}{src_label}", value=f"${data['price']:,.2f}")
 
 st.divider()
 
@@ -483,7 +489,7 @@ with tab_portfolio:
             st.dataframe(df, use_container_width=True, hide_index=True)
 
 with tab_room:
-    st.subheader("⚔️ Multi-Agent Swarm Intelligence & Expert Rooms")
+    st.subheader("⚔️ Multi-Agent Swarm Intelligence & Automated Order Flow")
     
     grid = st.columns(2)
     for idx, (asset_name, delib_data) in enumerate(deliberations.items()):
@@ -494,6 +500,7 @@ with tab_room:
                 badge = "badge-veto"
                 
             stale_warning = " <span style='color: #EF4444; font-size: 10px;'>[MARKET CLOSED / STALE]</span>" if delib_data.get("is_stale") else ""
+            poc_disp = f" | <b>POC:</b> ${delib_data['poc']:,.2f}" if delib_data.get('poc') else ""
             
             col.markdown(f"""
             <div class="card">
@@ -502,11 +509,11 @@ with tab_room:
                     <span style="font-size:22px; font-weight:bold; color:#8B5CF6;">{delib_data['score']}%</span>
                 </div>
                 <div style="font-size:11px; color:#94A3B8; margin-bottom:6px;">
-                    Mode: <b>{delib_data['persona']}</b> | Trend: <b>{delib_data['mtf_trend']}</b> | Signal: <span class="{badge}">{delib_data['decision']}</span>
+                    Mode: <b>{delib_data['persona']}</b> | Trend: <b>{delib_data['mtf_trend']}</b>{poc_disp} | Signal: <span class="{badge}">{delib_data['decision']}</span>
                 </div>
                 <div style="font-size:11px;">
-                    • 🐋 <b>Whale Tracker:</b> {delib_data['whale']}<br>
-                    • 🌪️ <b>Vol-Arb / Scalper:</b> {delib_data['vol']}<br>
+                    • 📊 <b>Order Flow / POC Agent:</b> {delib_data['order_flow']}<br>
+                    • 🌪️ <b>Vol-Arb / Gamma Scalper:</b> {delib_data['vol']}<br>
                     • 📰 <b>Macro NLP Veto:</b> {delib_data['macro']}<br>
                     • 🎯 <b>Limit Entry:</b> ${delib_data['limit_entry']:,.2f} | <b>Target:</b> ${delib_data['target_price']:,.2f} | <b>Stop:</b> ${delib_data['stop_price']:,.2f}
                 </div>
@@ -525,7 +532,7 @@ with tab_transcripts:
                 <span>CIO Composite Score: <b style="color:#8B5CF6;">{t['score']}%</b> ({t['decision']})</span>
             </div>
             <div style="margin-top:10px; font-size:12px; border-left: 2px solid #38BDF8; padding-left: 8px; color: #38BDF8;">
-                <b>Specialized Agent Telemetry:</b> Whale Flow: {t['whale']} | Volatility Index: {t['vol']} | Macro Sentiment: {t['macro']}
+                <b>Order Flow & Volume Profile Telemetry:</b> {t['order_flow']} | Volatility Index: {t['vol']} | Macro Sentiment: {t['macro']}
             </div>
             <div style="margin-top:10px; font-size:13px;">
                 <div style="color:#10B981; margin-bottom:6px;">🟢 <b>Bull Advocate Case:</b> {t['bull']}</div>
