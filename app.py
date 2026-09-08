@@ -12,7 +12,7 @@ from datetime import datetime, date
 # 1. PAGE CONFIGURATION & INSTITUTIONAL TERMINAL
 # -------------------------------------------------------------
 st.set_page_config(
-    page_title="Umbrella Apex Institutional Engine v2.8",
+    page_title="Umbrella Apex Institutional Engine v2.9",
     page_icon="🏛️",
     layout="wide"
 )
@@ -44,7 +44,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-count = st_autorefresh(interval=15000, limit=10000, key="apex_refresh_v28")
+count = st_autorefresh(interval=15000, limit=10000, key="apex_refresh_v29")
 
 @st.cache_resource
 def init_supabase():
@@ -64,7 +64,7 @@ def send_telegram_alert(message):
         chat_id = st.secrets.get("TELEGRAM_CHAT_ID")
         if token and chat_id:
             url = f"https://api.telegram.org/bot{token}/sendMessage"
-            payload = {"chat_id": chat_id, "text": f"🏛️ **Apex Institutional v2.8**\n\n{message}", "parse_mode": "Markdown"}
+            payload = {"chat_id": chat_id, "text": f"🏛️ **Apex Institutional v2.9**\n\n{message}", "parse_mode": "Markdown"}
             requests.post(url, json=payload, timeout=5)
     except Exception as e:
         print(f"Telegram alert error: {e}")
@@ -148,7 +148,7 @@ def fetch_apex_market_data():
             "vol_ratio": round(vol_ratio, 2),
             "is_stale": is_stale,
             "poc": round(est_poc, 2),
-            "source": "Automated yfinance Feed"
+            "source": "yfinance Feed"
         }
         
     return market_data
@@ -181,10 +181,10 @@ class ApexWhaleTrackerAgent:
     @staticmethod
     def analyze(asset):
         profiles = [
-            ("Whale cluster accumulation detected at exchange cold storage wallets", random.randint(70, 92)),
-            ("Heavy institutional block-order outflow / exchange deposit surge", random.randint(12, 35)),
+            ("Whale cluster accumulation detected at exchange cold storage wallets", random.randint(60, 85)),
+            ("Heavy institutional block-order outflow / exchange deposit surge", random.randint(20, 45)),
             ("Passive retail drift / Neutral dark-pool volume distribution", random.randint(45, 55)),
-            ("Smart-money liquidity sweep and iceberg bid stack activation", random.randint(68, 88))
+            ("Smart-money liquidity sweep and iceberg bid stack activation", random.randint(58, 82))
         ]
         chosen = random.choice(profiles)
         return {"msg": chosen[0], "score": chosen[1]}
@@ -193,9 +193,9 @@ class ApexOrderFlowAgent:
     @staticmethod
     def analyze(asset, data):
         profiles = [
-            (f"Bid absorption active near volume node ${data['poc']}", random.randint(70, 88)),
-            (f"Passive liquidity resting near session equilibrium (${data['poc']})", random.randint(45, 60)),
-            (f"Momentum imbalance: Aggressive delta expansion detected", random.randint(65, 82))
+            (f"Bid absorption active near volume node ${data['poc']}", random.randint(60, 82)),
+            (f"Passive liquidity resting near session equilibrium (${data['poc']})", random.randint(45, 55)),
+            (f"Momentum imbalance: Aggressive delta expansion detected", random.randint(55, 78))
         ]
         chosen = random.choice(profiles)
         return {"msg": chosen[0], "score": chosen[1]}
@@ -204,9 +204,9 @@ class ApexVolArbAgent:
     @staticmethod
     def analyze(vol_ratio):
         if vol_ratio > 1.35:
-            return {"msg": f"Volatility Expansion Squeeze (Ratio: {vol_ratio}x): Gamma scalping active", "score": 80, "mode": "BREAKOUT"}
+            return {"msg": f"Volatility Expansion Squeeze (Ratio: {vol_ratio}x): Gamma scalping active", "score": 75, "mode": "BREAKOUT"}
         elif vol_ratio < 0.75:
-            return {"msg": f"Volatility Compression Range (Ratio: {vol_ratio}x): Mean-reversion grid active", "score": 25, "mode": "REVERSION"}
+            return {"msg": f"Volatility Compression Range (Ratio: {vol_ratio}x): Mean-reversion grid active", "score": 30, "mode": "REVERSION"}
         else:
             return {"msg": f"Normal Volatility Band (Ratio: {vol_ratio}x): Standard auction rhythm", "score": 50, "mode": "NEUTRAL"}
 
@@ -223,7 +223,7 @@ class ApexMacroNLPAgent:
         return {"headline": chosen[0], "status": chosen[1], "penalty": chosen[2]}
 
 # -------------------------------------------------------------
-# 4. WAR ROOM DELIBERATION ENGINE WITH ENHANCED TRANSCRIPTS
+# 4. WAR ROOM DELIBERATION ENGINE (NEUTRAL-FIRST BALANCED SCORING)
 # -------------------------------------------------------------
 def run_apex_deliberation(asset, data, memory):
     current_time = time.time()
@@ -249,13 +249,13 @@ def run_apex_deliberation(asset, data, memory):
             historical_penalty += 3
             specific_lesson = f"Warning from memory ledger: {lesson.get('lesson_learned')}"
 
-    # Combined composite scoring: Whale (35%) + Order Flow/POC (35%) + Vol-Arb (20%) + Macro/Base (10%)
-    weighted_score = (whale_data["score"] * 0.35) + (order_flow["score"] * 0.35) + (vol_data["score"] * 0.20) + (50 * 0.10)
+    # Rebalanced composite scoring removing upward drift: Whale (30%) + Order Flow/POC (30%) + Vol-Arb (20%) + Baseline Neutral (20%)
+    weighted_score = (whale_data["score"] * 0.30) + (order_flow["score"] * 0.30) + (vol_data["score"] * 0.20) + (50 * 0.20)
     
     if mtf_trend == "BULLISH":
-        weighted_score += 10
+        weighted_score += 5
     elif mtf_trend == "BEARISH":
-        weighted_score -= 10
+        weighted_score -= 5
 
     weighted_score += macro_data["penalty"]
     final_score = int(max(5, min(95, weighted_score - historical_penalty)))
@@ -425,8 +425,8 @@ portfolio_state = supabase.table("agent_portfolio").select("*").eq("agent_id", "
 st.markdown(f"""
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
     <div>
-        <h1 style="margin:0;">🏛️ Umbrella Apex Institutional Engine v2.8</h1>
-        <p style="margin:0; color: #94A3B8; font-size: 13px;">Whale Trackers • Volume Profile POC • Dynamic Kelly Sizing • NLP Macro Veto • 24/7 Automated Feed</p>
+        <h1 style="margin:0;">🏛️ Umbrella Apex Institutional Engine v2.9</h1>
+        <p style="margin:0; color: #94A3B8; font-size: 13px;">Whale Trackers • Volume Profile POC • Dynamic Kelly Sizing • Neutral Balanced Scoring • 24/7 Automated Feed</p>
     </div>
     <div style="background: #090D16; padding: 8px 16px; border-radius: 8px; border: 1px solid #1E293B;">
         <span style="color: #10B981; font-weight: bold;">⚡ 24/7 AUTOMATED SYNC</span>
@@ -437,9 +437,9 @@ st.markdown(f"""
 
 cols = st.columns(4)
 for i, (asset, data) in enumerate(market_snapshot.items()):
-    stale_tag = " ⚠️ (Market Closed)" if data["is_stale"] else ""
-    src_label = f" <span style='font-size:9px; color:#38BDF8;'>[{data.get('source', 'API')}]</span>"
-    cols[i].metric(label=f"{asset.upper()}{stale_tag}{src_label}", value=f"${data['price']:,.2f}")
+    stale_tag = " [Closed]" if data["is_stale"] else ""
+    label_text = f"{asset.upper()}{stale_tag} ({data.get('source', 'API')})"
+    cols[i].metric(label=label_text, value=f"${data['price']:,.2f}")
 
 st.divider()
 
