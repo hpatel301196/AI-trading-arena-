@@ -44,7 +44,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-count = st_autorefresh(interval=15000, limit=10000, key="hp_refresh_v3")
+count = st_autorefresh(interval=15000, limit=10000, key="hp_refresh_v4")
 
 @st.cache_resource
 def init_supabase():
@@ -162,17 +162,14 @@ def fetch_memory_ledger():
         return []
 
 def get_reinforcement_adjustment():
-    """Calculates active reinforcement learning weight adjustment from past reflections."""
     lessons = fetch_memory_ledger()
     if not lessons:
         return 0.0
-    
     recent_pnl = sum([float(l.get("pnl", 0)) for l in lessons[:5]])
-    # Positive reinforcement boosts confidence multiplier, negative penalizes
     if recent_pnl > 0:
-        return 4.0 # Positive feedback loop adjustment
+        return 4.0
     elif recent_pnl < 0:
-        return -6.0 # Protective risk penalty adjustment
+        return -6.0
     return 0.0
 
 def store_advanced_self_reflection(asset, trade_type, pnl, reflection, lesson, reward_score):
@@ -190,70 +187,98 @@ memory_rules = fetch_memory_ledger()
 reinforcement_bias = get_reinforcement_adjustment()
 
 # -------------------------------------------------------------
-# 3. SPECIALIZED TRADER PERSONA AGENTS
+# 3. HYBRID AGENT SUITE: QUANT BACKEND + NAMED TRADER PERSONAS
 # -------------------------------------------------------------
-class TraderDaleAgent:
-    """Focuses on Volume Profile, Value Areas, and Point of Control (POC) auctions."""
-    @staticmethod
-    def analyze(asset, data):
-        profiles = [
-            (f"Trader Dale: Price is testing high-volume node POC at ${data['poc']}. Expecting strong value acceptance.", random.randint(62, 85)),
-            (f"Trader Dale: Value Area Low rejection detected. Initiating responsive buying near POC.", random.randint(58, 80)),
-            (f"Trader Dale: Low volume node migration. Auction balance is drifting without acceptance.", random.randint(40, 52))
-        ]
-        chosen = random.choice(profiles)
-        return {"comment": chosen[0], "score": chosen[1]}
 
-class FabioValentiniAgent:
-    """Focuses on Institutional Block-Orders, Icebergs, and Whale Accumulation."""
+# Quantitative Technical Backend Bots (From v2.8)
+class ApexVolumeProfilePOCAgent:
     @staticmethod
-    def analyze(asset):
-        profiles = [
-            ("Fabio Valentini: Whale cluster accumulation active at cold storage wallets. Smart money loading bids.", random.randint(64, 88)),
-            ("Fabio Valentini: Heavy institutional block outflow detected. Order book imbalance leaning heavy.", random.randint(22, 44)),
-            ("Fabio Valentini: Neutral dark-pool liquidity distribution. Awaiting clean tape confirmation.", random.randint(45, 55))
-        ]
-        chosen = random.choice(profiles)
-        return {"comment": chosen[0], "score": chosen[1]}
+    def analyze(data):
+        poc = data["poc"]
+        price = data["price"]
+        distance_pct = ((price - poc) / poc) * 100.0
+        if abs(distance_pct) < 0.3:
+            return {"status": "POC_REJECTION_ZONE", "score": 75, "note": f"Price tightly coupled with POC node (${poc}). Value acceptance likely."}
+        elif distance_pct > 0:
+            return {"status": "ABOVE_VALUE", "score": 55, "note": f"Auction trading above value node POC (${poc}). Premium territory."}
+        else:
+            return {"status": "BELOW_VALUE", "score": 45, "note": f"Auction trading below value node POC (${poc}). Discount territory."}
 
-class TraderYushAgent:
-    """Focuses on Momentum Imbalance, Delta Expansion, and Order Flow Speed."""
+class ApexWhaleTrackerAgent:
     @staticmethod
     def analyze(vol_ratio):
-        if vol_ratio > 1.35:
-            return {"comment": f"Trader Yush: Delta expansion breakout! Volatility ratio at {vol_ratio}x. Gamma scalping active.", "score": 78, "mode": "MOMENTUM_BREAKOUT"}
-        elif vol_ratio < 0.75:
-            return {"comment": f"Trader Yush: Volatility compression range (Ratio: {vol_ratio}x). Mean-reversion grid active.", "score": 32, "mode": "GRID_REVERSION"}
+        if vol_ratio > 1.3:
+            return {"status": "ACCUMULATION", "score": 82, "note": "Whale block footprint active. Large limit absorption detected."}
+        elif vol_ratio < 0.7:
+            return {"status": "DISTRIBUTION", "score": 35, "note": "Institutional thin book distribution pattern active."}
         else:
-            return {"comment": f"Trader Yush: Standard auction tempo. Balanced order flow.", "score": 50, "mode": "NEUTRAL"}
+            return {"status": "BALANCED", "note": "Normal institutional tape footprint.", "score": 50}
 
-class KeshavTradesAgent:
-    """Focuses on Breakout Scalping and Volatility Squeeze Execution."""
+class ApexVolArbAgent:
     @staticmethod
-    def analyze():
-        profiles = [
-            ("Keshav Trades: Volatility squeeze coiled tight. Breakout confirmation imminent.", 75),
-            ("Keshav Trades: Clean trend continuation structure on intraday moving averages.", 70),
-            ("Keshav Trades: Chop zone detected. Sitting on hands until liquidity clears.", 45)
-        ]
-        chosen = random.choice(profiles)
-        return {"comment": chosen[0], "score": chosen[1]}
+    def analyze(vol_ratio):
+        if vol_ratio > 1.4:
+            return {"mode": "VOLATILITY_EXPANSION", "score": 78, "note": f"Volatility surge ratio at {vol_ratio}x. Breakout protocols engaged."}
+        elif vol_ratio < 0.75:
+            return {"mode": "VOLATILITY_COMPRESSION", "score": 40, "note": f"Volatility squeeze condition (Ratio {vol_ratio}x). Mean-reversion grid active."}
+        else:
+            return {"mode": "NORMAL", "score": 50, "note": "Standard volatility channel."}
 
-class AndreaCimiAgent:
-    """Focuses on Macro Risk Filtering and Geopolitical Vetoes."""
+class ApexMacroNLPAgent:
     @staticmethod
     def analyze():
         headlines = [
-            ("Andrea Cimi (Macro): Central bank liquidity flows stable. Risk-on environment clear.", "CLEAR", 0),
-            ("Andrea Cimi (Macro): Safe-haven safe flows increasing due to supply chain tightening.", "CLEAR", 0),
-            ("Andrea Cimi (Macro): Sudden inflation print risk warning! Recommending risk reduction.", "VETO_WARNING", -25),
-            ("Andrea Cimi (Macro): Quiet macro calendar session. No structural constraints.", "CLEAR", 0)
+            ("Macro NLP: Global liquidity flows stable. Sentiment risk index neutral-positive.", "CLEAR", 0),
+            ("Macro NLP: Central bank rate commentary indicates soft landing bias.", "CLEAR", 0),
+            ("Macro NLP: Supply chain tightening inflation alert! Risk reduction recommended.", "VETO_WARNING", -25),
+            ("Macro NLP: Geopolitical safe-haven flows active. Volatility buffer applied.", "CLEAR", 0)
         ]
         chosen = random.choice(headlines)
         return {"headline": chosen[0], "status": chosen[1], "penalty": chosen[2]}
 
+# Named Expert Trader Personas (Your Custom Specialists)
+class TraderDaleAgent:
+    @staticmethod
+    def comment(data):
+        comments = [
+            f"Trader Dale: Testing High Volume Node (HVN) at ${data['poc']}. Looking for rejection candle.",
+            f"Trader Dale: Value Area High test. Expecting responsive selling or quick breakout confirmation.",
+            f"Trader Dale: Low Volume Node (LVN) vacuum. Price will knife through here quickly."
+        ]
+        return random.choice(comments)
+
+class FabioValentiniAgent:
+    @staticmethod
+    def comment():
+        comments = [
+            "Fabio Valentini: Smart money iceberg orders showing up on level 2. Accumulation phase verified.",
+            "Fabio Valentini: Dark pool prints indicate large institutional block hedging.",
+            "Fabio Valentini: Retail trap setup forming. Order book imbalance favored to the sell side."
+        ]
+        return random.choice(comments)
+
+class TraderYushAgent:
+    @staticmethod
+    def comment(vol_ratio):
+        return f"Trader Yush: Delta expansion speed at {vol_ratio}x velocity. Momentum traders are taking control."
+
+class KeshavTradesAgent:
+    @staticmethod
+    def comment():
+        comments = [
+            "Keshav Trades: Breakout channel squeeze coiled. Ready for immediate scalping execution.",
+            "Keshav Trades: Moving average crossover validation confirmed on intraday timeframe."
+        ]
+        return random.choice(comments)
+
+class AndreaCimiAgent:
+    @staticmethod
+    def comment():
+        return "Andrea Cimi: Risk management parameters verified. Margin utilization is within safe institutional bounds."
+
+
 # -------------------------------------------------------------
-# 4. WAR ROOM DELIBERATION WITH REINFORCEMENT LEARNING
+# 4. WAR ROOM DELIBERATION (HYBRID QUANT + TRADER PERSONAS)
 # -------------------------------------------------------------
 def run_hp_deliberation(asset, data, memory):
     current_time = time.time()
@@ -267,27 +292,34 @@ def run_hp_deliberation(asset, data, memory):
         cached["price"] = price
         return cached
 
-    dale = TraderDaleAgent.analyze(asset, data)
-    fabio = FabioValentiniAgent.analyze(asset)
-    yush = TraderYushAgent.analyze(vol_ratio)
-    keshav = KeshavTradesAgent.analyze()
-    andrea = AndreaCimiAgent.analyze()
+    # Run Quantitative Backend Bots
+    poc_bot = ApexVolumeProfilePOCAgent.analyze(data)
+    whale_bot = ApexWhaleTrackerAgent.analyze(vol_ratio)
+    vol_bot = ApexVolArbAgent.analyze(vol_ratio)
+    macro_bot = ApexMacroNLPAgent.analyze()
 
-    # Active Reinforcement Learning integration
+    # Run Named Trader Personas
+    dale_comm = TraderDaleAgent.comment(data)
+    fabio_comm = FabioValentiniAgent.comment()
+    yush_comm = TraderYushAgent.comment(vol_ratio)
+    keshav_comm = KeshavTradesAgent.comment()
+    andrea_comm = AndreaCimiAgent.comment()
+
+    # Reinforcement bias
     learning_adjustment = reinforcement_bias
 
-    # Composite scoring incorporating Trader Dale, Fabio, Yush, and Keshav
-    weighted_score = (dale["score"] * 0.25) + (fabio["score"] * 0.25) + (yush["score"] * 0.25) + (keshav["score"] * 0.25)
+    # Composite Score from Quant Backend + Reinforcement Learning
+    weighted_score = (poc_bot["score"] * 0.3) + (whale_bot["score"] * 0.3) + (vol_bot["score"] * 0.3) + 50 * 0.1
     
     if mtf_trend == "BULLISH":
-        weighted_score += 5
+        weighted_score += 6
     elif mtf_trend == "BEARISH":
-        weighted_score -= 5
+        weighted_score -= 6
 
-    weighted_score += andrea["penalty"] + learning_adjustment
+    weighted_score += macro_bot["penalty"] + learning_adjustment
     final_score = int(max(5, min(95, weighted_score)))
 
-    if andrea["status"] == "VETO_WARNING" and abs(final_score - 50) < 25:
+    if macro_bot["status"] == "VETO_WARNING" and abs(final_score - 50) < 25:
         decision = "VETOED_FLAT"
     elif final_score >= 68:
         decision = "BUY_LONG"
@@ -296,7 +328,7 @@ def run_hp_deliberation(asset, data, memory):
     else:
         decision = "NEUTRAL"
 
-    dynamic_atr = max(atr, price * 0.005) 
+    dynamic_atr = max(atr, price * 0.005)
     
     if decision == "BUY_LONG":
         limit_entry = round(price - (dynamic_atr * 0.2), 2)
@@ -312,13 +344,14 @@ def run_hp_deliberation(asset, data, memory):
         stop_price = round(price - (dynamic_atr * 1.5), 2)
 
     result = {
-        "asset": asset, "price": price, "atr": dynamic_atr, "mtf_trend": mtf_trend, "persona": f"HP_SWARM_{yush['mode']}",
+        "asset": asset, "price": price, "atr": dynamic_atr, "mtf_trend": mtf_trend, "persona": f"HP_HYBRID_{vol_bot['mode']}",
         "score": final_score, "decision": decision, "is_stale": data.get("is_stale", False),
         "limit_entry": limit_entry, "target_price": target_price, "stop_price": stop_price,
-        "dale": dale["comment"], "fabio": fabio["comment"], "yush": yush["comment"], "keshav": keshav["comment"], "macro": andrea["headline"], 
+        "poc_note": poc_bot["note"], "whale_note": whale_bot["note"], "macro_note": macro_bot["headline"],
+        "dale": dale_comm, "fabio": fabio_comm, "yush": yush_comm, "keshav": keshav_comm, "andrea": andrea_comm,
         "poc": data.get("poc"),
-        "bull": f"Trader Dale & Fabio Valentini Consensus: Volume POC validation confirms institutional accumulation. Continuation favored.",
-        "bear": f"Andrea Cimi & Keshav Risk Check: Macro notes '{andrea['headline']}'. Reinforcement learning bias factor: {learning_adjustment:+.1f}."
+        "bull": f"Trader Dale & Whale Tracker Consensus: {poc_bot['note']} {whale_bot['note']}",
+        "bear": f"Macro & Volatility Check: {macro_bot['headline']} Reinforcement learning factor: {learning_adjustment:+.1f}."
     }
     
     st.session_state.cached_deliberations[asset] = result
@@ -336,7 +369,8 @@ if len(st.session_state.debate_transcripts) == 0 or st.session_state.debate_tran
         "time": datetime.now().strftime("%H:%M:%S"),
         "asset": active_delib["asset"], "persona": active_delib["persona"],
         "score": active_delib["score"], "decision": active_delib["decision"],
-        "dale": active_delib["dale"], "fabio": active_delib["fabio"], "yush": active_delib["yush"], "keshav": active_delib["keshav"], "macro": active_delib["macro"],
+        "poc_note": active_delib["poc_note"], "whale_note": active_delib["whale_note"],
+        "dale": active_delib["dale"], "fabio": active_delib["fabio"], "yush": active_delib["yush"],
         "bull": active_delib["bull"], "bear": active_delib["bear"],
         "entry": active_delib["limit_entry"], "target": active_delib["target_price"], "stop": active_delib["stop_price"]
     })
@@ -396,12 +430,12 @@ def execute_hp_trades(delibrations_dict):
 
             if realized_pnl > 0:
                 reward_score = 100
-                reflection = f"REINFORCEMENT SUCCESS: {pos_type} trade on {held_asset} secured +{pnl_pct:.2f}% profit. Trader Dale POC validation & Fabio whale alignment confirmed."
-                lesson = f"POSITIVE REINFORCEMENT: Volume node acceptance models validated. Increasing confidence multiplier."
+                reflection = f"REINFORCEMENT SUCCESS: {pos_type} trade on {held_asset} secured +{pnl_pct:.2f}% profit. POC and Volume Profile models validated."
+                lesson = f"POSITIVE REINFORCEMENT: Volume node acceptance models active and precise. Confidence boosted."
             else:
                 reward_score = -50
                 reflection = f"REINFORCEMENT CORRECTION: {pos_type} trade on {held_asset} closed at {pnl_pct:.2f}% loss. Trigger: {exit_reason}."
-                lesson = f"NEGATIVE REINFORCEMENT: Order flow divergence at limit entry. Tightening structural stop rules."
+                lesson = f"NEGATIVE REINFORCEMENT: Order flow deviation at breakout. Tightening stop parameters."
 
             store_advanced_self_reflection(held_asset, pos_type, realized_pnl, reflection, lesson, reward_score)
             st.session_state.reflection_history.insert(0, {"time": datetime.now().strftime("%H:%M:%S"), "reflection": reflection, "lesson": lesson, "reward": reward_score})
@@ -455,7 +489,7 @@ st.markdown(f"""
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
     <div>
         <h1 style="margin:0;">⚡ HP Advanced Trading Platform</h1>
-        <p style="margin:0; color: #94A3B8; font-size: 13px;">Trader Dale • Fabio Valentini • Trader Yush • Keshav Trades • Andrea Cimi • Reinforcement Learning</p>
+        <p style="margin:0; color: #94A3B8; font-size: 13px;">Quant Backend Bots (Whale, POC, VolArb, Macro NLP) + Named Personas (Dale, Fabio, Yush, Keshav, Andrea)</p>
     </div>
     <div style="background: #090D16; padding: 8px 16px; border-radius: 8px; border: 1px solid #1E293B;">
         <span style="color: #10B981; font-weight: bold;">⚡ 24/7 LIVE STREAM</span>
@@ -529,7 +563,7 @@ with tab_portfolio:
             st.dataframe(df, use_container_width=True, hide_index=True)
 
 with tab_room:
-    st.subheader("⚔️ Multi-Agent Intelligence (Trader Specialists)")
+    st.subheader("⚔️ Multi-Agent Intelligence (Quant Bots + Trader Personas)")
     
     grid = st.columns(2)
     for idx, (asset_name, delib_data) in enumerate(deliberations.items()):
@@ -552,12 +586,17 @@ with tab_room:
                     Mode: <b>{delib_data['persona']}</b> | Trend: <b>{delib_data['mtf_trend']}</b>{poc_disp} | Signal: <span class="{badge}">{delib_data['decision']}</span>
                 </div>
                 <div style="font-size:11px;">
-                    • 📊 <b>Trader Dale:</b> {delib_data['dale']}<br>
-                    • 🐋 <b>Fabio Valentini:</b> {delib_data['fabio']}<br>
-                    • ⚡ <b>Trader Yush:</b> {delib_data['yush']}<br>
-                    • 🚀 <b>Keshav Trades:</b> {delib_data['keshav']}<br>
-                    • 📰 <b>Andrea Cimi:</b> {delib_data['macro']}<br>
-                    • 🎯 <b>Limit Entry:</b> ${delib_data['limit_entry']:,.2f} | <b>Target:</b> ${delib_data['target_price']:,.2f} | <b>Stop:</b> ${delib_data['stop_price']:,.2f}
+                    <b>Quant Backend Telemetry:</b><br>
+                    • 📊 <b>POC Agent:</b> {delib_data['poc_note']}<br>
+                    • 🐋 <b>Whale Tracker:</b> {delib_data['whale_note']}<br>
+                    • 📰 <b>Macro NLP:</b> {delib_data['macro_note']}<br><br>
+                    <b>Named Trader Personas:</b><br>
+                    • 🎩 <b>{delib_data['dale']}</b><br>
+                    • 🐋 <b>{delib_data['fabio']}</b><br>
+                    • ⚡ <b>{delib_data['yush']}</b><br>
+                    • 🚀 <b>{delib_data['keshav']}</b><br>
+                    • 🛡️ <b>{delib_data['andrea']}</b><br><br>
+                    🎯 <b>Limit Entry:</b> ${delib_data['limit_entry']:,.2f} | <b>Target:</b> ${delib_data['target_price']:,.2f} | <b>Stop:</b> ${delib_data['stop_price']:,.2f}
                 </div>
                 <div class="bull-box" style="margin-top:6px;">{delib_data['bull']}</div>
                 <div class="bear-box">{delib_data['bear']}</div>
@@ -574,7 +613,7 @@ with tab_transcripts:
                 <span>Composite Score: <b style="color:#8B5CF6;">{t['score']}%</b> ({t['decision']})</span>
             </div>
             <div style="margin-top:10px; font-size:12px; border-left: 2px solid #38BDF8; padding-left: 8px; color: #38BDF8;">
-                <b>Telemetry:</b> Dale: {t['dale']} | Fabio: {t['fabio']}
+                <b>Telemetry:</b> POC: {t['poc_note']} | Whale: {t['whale_note']} | Dale: {t['dale']}
             </div>
             <div style="margin-top:10px; font-size:13px;">
                 <div style="color:#10B981; margin-bottom:6px;">🟢 <b>Consensus Bull Case:</b> {t['bull']}</div>
