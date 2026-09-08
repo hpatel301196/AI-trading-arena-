@@ -223,25 +223,24 @@ def run_apex_deliberation(asset, data, memory):
     else:
         decision = "NEUTRAL"
 
-    safe_atr = max(atr, price * 0.002) 
-    target_distance = round(safe_atr * 2.0, 2)
-    stop_distance = round(safe_atr * 1.0, 2)
-
+    # --- ROBUST SPACING MATH FOR ENTRY, TARGET, AND STOP ---
+    dynamic_atr = max(atr, price * 0.005) 
+    
     if decision == "BUY_LONG":
-        limit_entry = vp_data["poc"]
-        target_price = round(limit_entry + target_distance, 2)
-        stop_price = round(limit_entry - stop_distance, 2)
+        limit_entry = round(price - (dynamic_atr * 0.2), 2)
+        target_price = round(limit_entry + (dynamic_atr * 2.0), 2)
+        stop_price = round(limit_entry - (dynamic_atr * 1.0), 2)
     elif decision == "SELL_SHORT":
-        limit_entry = round(price + (safe_atr * 0.2), 2)
-        target_price = round(limit_entry - target_distance, 2)
-        stop_price = round(limit_entry + stop_distance, 2)
+        limit_entry = round(price + (dynamic_atr * 0.2), 2)
+        target_price = round(limit_entry - (dynamic_atr * 2.0), 2)
+        stop_price = round(limit_entry + (dynamic_atr * 1.0), 2)
     else:
         limit_entry = price
-        target_price = round(price + target_distance, 2)
-        stop_price = round(price - stop_distance, 2)
+        target_price = round(price + (dynamic_atr * 1.5), 2)
+        stop_price = round(price - (dynamic_atr * 1.5), 2)
 
     result = {
-        "asset": asset, "price": price, "atr": safe_atr, "mtf_trend": mtf_trend, "persona": "SYNTHESIZED_MASTERS_MTF",
+        "asset": asset, "price": price, "atr": dynamic_atr, "mtf_trend": mtf_trend, "persona": "SYNTHESIZED_MASTERS_MTF",
         "score": final_score, "decision": decision,
         "limit_entry": limit_entry, "target_price": target_price, "stop_price": stop_price,
         "vp": vp_data["msg"], "delta": delta_data["msg"], "liq": liq_data["msg"],
@@ -255,7 +254,6 @@ if time.time() - st.session_state.last_signal_reset > 300:
     st.session_state.cached_deliberations = {}
     st.session_state.last_signal_reset = time.time()
 
-# CALCULATE DELIBERATIONS FIRST BEFORE EXECUTION
 deliberations = {asset: run_apex_deliberation(asset, market_snapshot[asset], memory_rules) for asset in market_snapshot}
 
 active_delib = max(deliberations.values(), key=lambda x: abs(x["score"] - 50))
@@ -475,7 +473,7 @@ with tab_room:
                     • 📊 <b>Volume Profile / State:</b> {vp_msg}<br>
                     • 🌊 <b>CVD Flow / Exhaustion:</b> {delta_msg}<br>
                     • 💧 <b>Liquidity / Sweeps:</b> {liq_msg}<br>
-                    • 🎯 <b>Limit Entry:</b> ${delib_data['limit_entry']} | <b>Target:</b> ${delib_data['target_price']} | <b>Stop:</b> ${delib_data['stop_price']}
+                    • 🎯 <b>Limit Entry:</b> ${delib_data['limit_entry']:,.2f} | <b>Target:</b> ${delib_data['target_price']:,.2f} | <b>Stop:</b> ${delib_data['stop_price']:,.2f}
                 </div>
                 <div class="bull-box" style="margin-top:6px;">{delib_data['bull']}</div>
                 <div class="bear-box">{delib_data['bear']}</div>
@@ -514,67 +512,3 @@ with tab_memory:
         st.markdown("#### Database Memory Records")
         mem_df = pd.DataFrame(memory_rules)[["timestamp", "asset", "trade_type", "pnl", "lesson_learned"]]
         st.dataframe(mem_df, use_container_width=True, hide_index=True)
-        def run_apex_deliberation(asset, data, memory):
-    current_time = time.time()
-    price = data["price"]
-    atr = data["atr"]
-    mtf_trend = data["mtf_trend"]
-    
-    if asset in st.session_state.cached_deliberations and (current_time - st.session_state.last_signal_reset < 300):
-        cached = st.session_state.cached_deliberations[asset]
-        cached["price"] = price
-        return cached
-
-    vp_data = ApexVolumeProfileAgent.analyze(price, atr)
-    delta_data = ApexDeltaImbalanceAgent.analyze()
-    liq_data = ApexLiquiditySweepAgent.analyze()
-
-    penalty = 0
-    for lesson in memory:
-        if lesson.get("asset") == asset and float(lesson.get("pnl", 0)) < 0:
-            penalty += 2
-
-    weighted_score = (vp_data["score"] * 0.40) + (delta_data["score"] * 0.35) + (liq_data["score"] * 0.25)
-    
-    if mtf_trend == "BULLISH":
-        weighted_score += 8
-    elif mtf_trend == "BEARISH":
-        weighted_score -= 8
-
-    final_score = int(max(5, min(95, weighted_score - penalty)))
-
-    if final_score >= 70:
-        decision = "BUY_LONG"
-    elif final_score <= 30:
-        decision = "SELL_SHORT"
-    else:
-        decision = "NEUTRAL"
-
-    # --- FORCED PROPER SPACING MATH ---
-    # Ensure ATR is robustly scaled based on asset price (at least 0.5% of price)
-    dynamic_atr = max(atr, price * 0.005) 
-    
-    if decision == "BUY_LONG":
-        limit_entry = round(price - (dynamic_atr * 0.2), 2)
-        target_price = round(limit_entry + (dynamic_atr * 2.0), 2)
-        stop_price = round(limit_entry - (dynamic_atr * 1.0), 2)
-    elif decision == "SELL_SHORT":
-        limit_entry = round(price + (dynamic_atr * 0.2), 2)
-        target_price = round(limit_entry - (dynamic_atr * 2.0), 2)
-        stop_price = round(limit_entry + (dynamic_atr * 1.0), 2)
-    else:
-        # NEUTRAL state: clearly space out levels around current price so they never look identical
-        limit_entry = price
-        target_price = round(price + (dynamic_atr * 1.5), 2)
-        stop_price = round(price - (dynamic_atr * 1.5), 2)
-
-    result = {
-        "asset": asset, "price": price, "atr": dynamic_atr, "mtf_trend": mtf_trend, "persona": "SYNTHESIZED_MASTERS_MTF",
-        "score": final_score, "decision": decision,
-        "limit_entry": limit_entry, "target_price": target_price, "stop_price": stop_price,
-        "vp": vp_data["msg"], "delta": delta_data["msg"], "liq": liq_data["msg"],
-        "bull": f"BULL APEX (1H MTF: {mtf_trend}): {vp_data['msg']}.", "bear": f"BEAR APEX (1H MTF: {mtf_trend}): Order flow status {delta_data['msg']}."
-    }
-    
-    st.session_state.cached_deliberations[asset] = result
-    return result
