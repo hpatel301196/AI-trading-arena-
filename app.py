@@ -3,6 +3,7 @@ import pandas as pd
 import yfinance as yf
 from streamlit_autorefresh import st_autorefresh
 from supabase import create_client, Client
+import requests
 import random
 import time
 from datetime import datetime, date
@@ -56,6 +57,18 @@ def init_supabase():
 
 supabase: Client = init_supabase()
 
+# Telegram Alert Integration Function
+def send_telegram_alert(message):
+    try:
+        token = st.secrets.get("TELEGRAM_BOT_TOKEN")
+        chat_id = st.secrets.get("TELEGRAM_CHAT_ID")
+        if token and chat_id:
+            url = f"https://api.telegram.org/bot{token}/sendMessage"
+            payload = {"chat_id": chat_id, "text": f"🏛️ **Apex Institutional Alert**\n\n{message}", "parse_mode": "Markdown"}
+            requests.post(url, json=payload, timeout=5)
+    except Exception as e:
+        print(f"Telegram alert error: {e}")
+
 if "debate_transcripts" not in st.session_state:
     st.session_state.debate_transcripts = []
 if "reflection_history" not in st.session_state:
@@ -68,7 +81,7 @@ if "price_buffer" not in st.session_state:
     st.session_state.price_buffer = {}
 
 # -------------------------------------------------------------
-# 2. TRADINGVIEW-SMOOTHED PRICE & ATR ENGINE
+# 2. MULTI-TIMEFRAME (MTF) CONFLUENCE & ATR ENGINE
 # -------------------------------------------------------------
 def fetch_apex_market_data():
     tickers = {"Bitcoin": "BTC-USD", "Ethereum": "ETH-USD", "Gold": "GC=F", "Silver": "SI=F"}
@@ -78,24 +91,37 @@ def fetch_apex_market_data():
     for name, symbol in tickers.items():
         try:
             t = yf.Ticker(symbol)
-            hist = t.history(period="5d", interval="15m")
-            if not hist.empty:
-                raw_p = float(hist['Close'].iloc[-1])
-                high_low = hist['High'] - hist['Low']
+            # Fetching 15m for execution and 1h for macro trend confluence
+            hist_15m = t.history(period="5d", interval="15m")
+            hist_1h = t.history(period="5d", interval="1h")
+            
+            if not hist_15m.empty:
+                raw_p = float(hist_15m['Close'].iloc[-1])
+                high_low = hist_15m['High'] - hist_15m['Low']
                 atr = float(high_low.rolling(14).mean().iloc[-1])
                 if pd.isna(atr): atr = raw_p * 0.008
             else:
                 raw_p = base_prices[name]
                 atr = raw_p * 0.008
+
+            # Higher Timeframe (1H) Trend Direction
+            if not hist_1h.empty and len(hist_1h) >= 3:
+                h1_sma = hist_1h['Close'].rolling(3).mean().iloc[-1]
+                h1_prev_sma = hist_1h['Close'].rolling(3).mean().iloc[-2]
+                mtf_trend = "BULLISH" if h1_sma >= h1_prev_sma else "BEARISH"
+            else:
+                mtf_trend = "NEUTRAL"
+
         except:
             raw_p = base_prices[name]
             atr = raw_p * 0.008
+            mtf_trend = "NEUTRAL"
         
         prev_p = st.session_state.price_buffer.get(name, raw_p)
         smoothed_p = round((raw_p * 0.25) + (prev_p * 0.75), 2)
         st.session_state.price_buffer[name] = smoothed_p
         
-        market_data[name] = {"price": smoothed_p, "atr": round(atr, 4)}
+        market_data[name] = {"price": smoothed_p, "atr": round(atr, 4), "mtf_trend": mtf_trend}
         
     return market_data
 
@@ -117,13 +143,14 @@ def store_self_reflection(asset, trade_type, pnl, reflection, lesson):
             "asset": asset, "trade_type": trade_type, "pnl": pnl,
             "reflection_notes": reflection, "lesson_learned": lesson
         }).execute()
+        send_telegram_alert(f"🧠 *Self-Reflection Logged*\nAsset: {asset}\nPnL: ${pnl:+.2f}\nLesson: {lesson}")
     except Exception as e:
         print(f"Memory log error: {e}")
 
 memory_rules = fetch_memory_lessons()
 
 # -------------------------------------------------------------
-# 4. SYNTHESIZED MASTERS AGENT SUITE (VALENTINI, YUSH, KESHAV, CIMI)
+# 4. SYNTHESIZED MASTERS AGENT SUITE
 # -------------------------------------------------------------
 class ApexVolumeProfileAgent:
     @staticmethod
@@ -132,7 +159,6 @@ class ApexVolumeProfileAgent:
         session_poc = round(price - poc_offset, 2)
         distance_to_poc = abs(price - session_poc)
         
-        # Cimi / Yush: Market State Classification
         if distance_to_poc <= (atr * 0.5):
             market_state = "Balanced Auction (Value Area Rotation)"
             msg = f"{market_state}: Rotating tightly around Session POC (${session_poc})"
@@ -147,7 +173,6 @@ class ApexVolumeProfileAgent:
 class ApexDeltaImbalanceAgent:
     @staticmethod
     def analyze():
-        # Yush & Keshav Order Flow States
         states = [
             ("Aggressive institutional bid absorption & positive CVD divergence", random.randint(70, 90)),
             ("Keshav Counter-Trend Exhaustion: Peak liquidity sweep & fading delta", random.choice([random.randint(15, 25), random.randint(75, 88)])),
@@ -170,12 +195,13 @@ class ApexLiquiditySweepAgent:
         }
 
 # -------------------------------------------------------------
-# 5. WAR ROOM DELIBERATION ENGINE (RELAXED THRESHOLDS: 70 / 30)
+# 5. WAR ROOM DELIBERATION ENGINE (WITH MTF CONFLUENCE)
 # -------------------------------------------------------------
 def run_apex_deliberation(asset, data, memory):
     current_time = time.time()
     price = data["price"]
     atr = data["atr"]
+    mtf_trend = data["mtf_trend"]
     
     if asset in st.session_state.cached_deliberations and (current_time - st.session_state.last_signal_reset < 300):
         cached = st.session_state.cached_deliberations[asset]
@@ -192,6 +218,13 @@ def run_apex_deliberation(asset, data, memory):
             penalty += 2
 
     weighted_score = (vp_data["score"] * 0.40) + (delta_data["score"] * 0.35) + (liq_data["score"] * 0.25)
+    
+    # Multi-Timeframe Confluence Adjustment
+    if mtf_trend == "BULLISH":
+        weighted_score += 8
+    elif mtf_trend == "BEARISH":
+        weighted_score -= 8
+
     final_score = int(max(5, min(95, weighted_score - penalty)))
 
     if final_score >= 70:
@@ -209,13 +242,13 @@ def run_apex_deliberation(asset, data, memory):
     stop_price = round(price - stop_distance, 2) if decision == "BUY_LONG" else (round(price + stop_distance, 2) if decision == "SELL_SHORT" else price)
 
     result = {
-        "asset": asset, "price": price, "atr": atr, "persona": "SYNTHESIZED_MASTERS_ENGINE",
+        "asset": asset, "price": price, "atr": atr, "mtf_trend": mtf_trend, "persona": "SYNTHESIZED_MASTERS_MTF",
         "score": final_score, "decision": decision,
         "limit_entry": limit_entry,
         "target_price": target_price,
         "stop_price": stop_price,
         "vp": vp_data["msg"], "delta": delta_data["msg"], "liq": liq_data["msg"],
-        "bull": f"BULL APEX ({vp_data['state']}): {vp_data['msg']}.", "bear": f"BEAR APEX: Order flow status {delta_data['msg']}."
+        "bull": f"BULL APEX (1H MTF: {mtf_trend}): {vp_data['msg']}.", "bear": f"BEAR APEX (1H MTF: {mtf_trend}): Order flow status {delta_data['msg']}."
     }
     
     st.session_state.cached_deliberations[asset] = result
@@ -238,7 +271,7 @@ if len(st.session_state.debate_transcripts) == 0 or st.session_state.debate_tran
     })
 
 # -------------------------------------------------------------
-# 6. APEX CLOSED-LOOP EXECUTION (DEEP POST-MORTEM REFLECTION)
+# 6. APEX CLOSED-LOOP EXECUTION & TELEGRAM ALERTS
 # -------------------------------------------------------------
 def execute_apex_trades(delibrations_dict):
     res = supabase.table("agent_portfolio").select("*").eq("agent_id", "Umbrella_Apex_Fund").execute()
@@ -292,10 +325,10 @@ def execute_apex_trades(delibrations_dict):
 
             if realized_pnl > 0:
                 reflection = f"SUCCESSFUL {pos_type} trade on {held_asset}. Closed at {pnl_pct:+.2f}% after {trade_duration_minutes:.1f}m. Reason: {exit_reason}."
-                lesson = f"THESIS VALIDATION: Auction market balance and order flow delta alignment were precise. WHAT TO CONTINUE: Keep utilizing Cimi/Yush market state classification and Keshav exhaustion triggers."
+                lesson = f"THESIS VALIDATION: MTF 1H trend alignment and order flow delta were precise. WHAT TO CONTINUE: Keep utilizing Cimi/Yush market state classification."
             else:
                 reflection = f"UNSUCCESSFUL {pos_type} trade on {held_asset}. Closed at {pnl_pct:+.2f}% after {trade_duration_minutes:.1f}m. Reason: {exit_reason}."
-                lesson = f"THESIS INVALIDATION: Price action failed to hold structural acceptance. WHAT TO CHANGE: Refine stop-loss tightness and require stronger multi-factor delta confirmation."
+                lesson = f"THESIS INVALIDATION: Price action failed structural acceptance. WHAT TO CHANGE: Refine stop-loss parameters."
 
             store_self_reflection(held_asset, pos_type, realized_pnl, reflection, lesson)
             st.session_state.reflection_history.insert(0, {"time": datetime.now().strftime("%H:%M:%S"), "reflection": reflection, "lesson": lesson})
@@ -308,6 +341,8 @@ def execute_apex_trades(delibrations_dict):
                 "agent_id": "Umbrella_Apex_Fund", "asset": held_asset, "action": f"CLOSE_{pos_type}",
                 "size": units, "price": current_p, "pnl": realized_pnl, "trade_num": trades_today + 1
             }).execute()
+
+            send_telegram_alert(f"🔴 *Position Closed: {pos_type} {held_asset}*\nRealized PnL: `${realized_pnl:,.2f}` ({pnl_pct:+.2f}%)\nReason: {exit_reason}")
 
     elif pos is None and trades_today < 12:
         valid_candidates = [d for d in delibrations_dict.values() if d["decision"] in ["BUY_LONG", "SELL_SHORT"]]
@@ -329,6 +364,8 @@ def execute_apex_trades(delibrations_dict):
                 supabase.table("agent_portfolio").update({"cash": round(cash * 0.05, 2), "current_position": new_pos, "trades_today": trades_today + 1}).eq("agent_id", "Umbrella_Apex_Fund").execute()
                 supabase.table("trade_ledger_history").insert({"agent_id": "Umbrella_Apex_Fund", "asset": entry_asset, "action": f"LIMIT_{pos_type}_{entry_asset}", "size": units, "price": limit_entry, "pnl": 0.0, "trade_num": trades_today + 1}).execute()
 
+                send_telegram_alert(f"🟢 *New Trade Executed: {pos_type} {entry_asset}*\nLimit Entry: `${limit_entry:,.2f}`\nTarget: `${best_candidate['target_price']}` | Stop: `${best_candidate['stop_price']}`\nCIO Score: {best_candidate['score']}%")
+
 execute_apex_trades(deliberations)
 
 trade_ledger = supabase.table("trade_ledger_history").select("*").order("id", desc=True).limit(15).execute().data
@@ -341,7 +378,7 @@ st.markdown(f"""
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
     <div>
         <h1 style="margin:0;">🏛️ Umbrella Apex Institutional Engine</h1>
-        <p style="margin:0; color: #94A3B8; font-size: 13px;">Synthesized Masters: Valentini, Yush, Keshav, Cimi • Thresholds (70/30)</p>
+        <p style="margin:0; color: #94A3B8; font-size: 13px;">MTF Confluence (15m + 1H) • Telegram Webhooks • Synthesized Masters</p>
     </div>
     <div style="background: #090D16; padding: 8px 16px; border-radius: 8px; border: 1px solid #1E293B;">
         <span style="color: #8B5CF6; font-weight: bold;">⚡ APEX SYSTEM ACTIVE</span>
@@ -352,7 +389,7 @@ st.markdown(f"""
 
 cols = st.columns(4)
 for i, (asset, data) in enumerate(market_snapshot.items()):
-    cols[i].metric(label=f"{asset.upper()} (ATR: ${data['atr']})", value=f"${data['price']:,.2f}")
+    cols[i].metric(label=f"{asset.upper()} (1H Trend: {data['mtf_trend']})", value=f"${data['price']:,.2f}")
 
 st.divider()
 
@@ -364,7 +401,7 @@ with tab_portfolio:
     col_p1, col_p2 = st.columns([1, 1])
 
     with col_p1:
-        st.subheader("💼 Fund Portfolio & ATR Mark-to-Market")
+        st.subheader("💼 Fund Portfolio & MTF Mark-to-Market")
         if len(portfolio_state) > 0:
             fund_data = portfolio_state[0]
             cash_bal = float(fund_data.get('cash', 100000.0))
@@ -407,7 +444,7 @@ with tab_portfolio:
                 </div>
                 """, unsafe_allow_html=True)
             else:
-                st.info("Active Position: 100% Cash / Neutral (Waiting for Volume Profile node touch)")
+                st.info("Active Position: 100% Cash / Neutral (Waiting for MTF Volume Profile node touch)")
 
     with col_p2:
         st.subheader("📑 Execution Audit Log")
@@ -416,7 +453,7 @@ with tab_portfolio:
             st.dataframe(df, use_container_width=True, hide_index=True)
 
 with tab_room:
-    st.subheader("⚔️ Apex Volume Profile & CVD Swarm Analysis")
+    st.subheader("⚔️ Apex Volume Profile & MTF Swarm Analysis")
     
     grid = st.columns(2)
     for idx, (asset_name, delib_data) in enumerate(deliberations.items()):
@@ -434,7 +471,7 @@ with tab_room:
                     <span style="font-size:22px; font-weight:bold; color:#8B5CF6;">{delib_data['score']}%</span>
                 </div>
                 <div style="font-size:11px; color:#94A3B8; margin-bottom:6px;">
-                    Mode: <b>{delib_data['persona']}</b> | Signal: <span class="{badge}">{delib_data['decision']}</span>
+                    Mode: <b>{delib_data['persona']}</b> | 1H Trend: <b>{delib_data['mtf_trend']}</b> | Signal: <span class="{badge}">{delib_data['decision']}</span>
                 </div>
                 <div style="font-size:11px;">
                     • 📊 <b>Volume Profile / State:</b> {vp_msg}<br>
