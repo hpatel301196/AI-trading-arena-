@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 import pandas as pd
 import yfinance as yf
@@ -49,8 +50,10 @@ count = st_autorefresh(interval=15000, limit=10000, key="hp_refresh_v7")
 @st.cache_resource
 def init_supabase():
     try:
-        url = st.secrets["SUPABASE_URL"]
-        key = st.secrets["SUPABASE_KEY"]
+        url = os.environ.get("SUPABASE_URL") or st.secrets.get("SUPABASE_URL")
+        key = os.environ.get("SUPABASE_KEY") or st.secrets.get("SUPABASE_KEY")
+        if not url or not key:
+            raise ValueError("Supabase URL or Key missing from environment configuration.")
         return create_client(url, key)
     except Exception as e:
         st.error(f"⚠️ Supabase Configuration Error: {e}")
@@ -60,8 +63,8 @@ supabase: Client = init_supabase()
 
 def send_telegram_alert(message):
     try:
-        token = st.secrets.get("TELEGRAM_BOT_TOKEN")
-        chat_id = st.secrets.get("TELEGRAM_CHAT_ID")
+        token = os.environ.get("TELEGRAM_BOT_TOKEN") or st.secrets.get("TELEGRAM_BOT_TOKEN")
+        chat_id = os.environ.get("TELEGRAM_CHAT_ID") or st.secrets.get("TELEGRAM_CHAT_ID")
         if token and chat_id:
             url = f"https://api.telegram.org/bot{token}/sendMessage"
             payload = {"chat_id": chat_id, "text": f"⚡ **HP Advanced Platform**\n\n{message}", "parse_mode": "Markdown"}
@@ -562,7 +565,6 @@ with tab_portfolio:
                 </div>
                 """, unsafe_allow_html=True)
                 
-                # Manual Override: Force Close Button
                 if st.button("🚨 Force Close Position Now (Manual Override)", type="primary"):
                     realized_pnl_manual = round((live_pnl_pct / 100.0) * (units * entry_p), 2)
                     net_cash_manual = round(cash_bal + (units * curr_p) if pos_type == "LONG" else cash_bal + (units * entry_p) + (units * (entry_p - curr_p)), 2)
@@ -642,34 +644,28 @@ with tab_transcripts:
                 <span><b>[{t['time']}] Asset: {t['asset']}</b> | Engine: {t['persona']}</span>
                 <span>Composite Score: <b style="color:#8B5CF6;">{t['score']}%</b> ({t['decision']})</span>
             </div>
-            <div style="margin-top:10px; font-size:12px; border-left: 2px solid #38BDF8; padding-left: 8px; color: #38BDF8;">
-                <b>Telemetry:</b> POC: {t['poc_note']} | Whale: {t['whale_note']} | News: {t['news_note']}
-            </div>
-            <div style="margin-top:10px; font-size:13px;">
-                <div style="color:#10B981; margin-bottom:6px;">🟢 <b>Consensus Bull Case:</b> {t['bull']}</div>
-                <div style="color:#EF4444; margin-bottom:6px;">🔴 <b>Risk & Veto Case:</b> {t['bear']}</div>
+            <div style="margin-top:10px; font-size:12px; border-left: 2px solid #38BDF8; padding-left: 8px;">
+                <b>POC/Whale Notes:</b> {t['poc_note']} {t['whale_note']}<br>
+                <b>News Sentiment:</b> {t['news_note']}<br>
+                <b>Strategy Insight:</b> {t['strategy']}<br>
+                <b>Bull Case:</b> {t['bull']}<br>
+                <b>Bear Case:</b> {t['bear']}<br>
+                <b>Levels:</b> Entry: ${t['entry']:,.2f} | Target: ${t['target']:,.2f} | Stop: ${t['stop']:,.2f}
             </div>
         </div>
         """, unsafe_allow_html=True)
 
 with tab_memory:
-    st.subheader("🧠 Advanced Reinforcement Learning & Self-Reflection")
-    st.write(f"**Active Reinforcement Feedback Weight:** `{reinforcement_bias:+.1f}` (Automatically tuned based on recent trade rewards)")
-    
-    if len(st.session_state.reflection_history) > 0:
-        for ref in st.session_state.reflection_history[:5]:
-            reward_color = "#10B981" if ref['reward'] > 0 else "#EF4444"
+    st.subheader("🧠 Advanced Reinforcement Memory Ledger")
+    ref_history = st.session_state.reflection_history
+    if len(ref_history) > 0:
+        for r in ref_history[:10]:
             st.markdown(f"""
-            <div class="reflection-box" style="border-left: 4px solid {reward_color};">
-                <b>[{ref['time']}] Reflection & Reward Score: <span style="color:{reward_color};">{ref['reward']}</span></b><br>
-                {ref['reflection']}<br>
-                <div style="margin-top:6px; color:#38BDF8;"><b>💡 Reinforcement Lesson:</b> {ref['lesson']}</div>
+            <div class="reflection-box">
+                <div style="font-size:12px; color:#A78BFA; font-weight:bold;">[{r['time']}] Reward Score: {r['reward']}</div>
+                <div style="font-size:12px; margin-top:4px;"><b>Reflection:</b> {r['reflection']}</div>
+                <div style="font-size:12px; margin-top:2px; color:#38BDF8;"><b>Lesson Learned:</b> {r['lesson']}</div>
             </div>
             """, unsafe_allow_html=True)
-
-    if len(memory_rules) > 0:
-        st.markdown("#### Permanent Supabase Reinforcement Memory Records")
-        mem_df = pd.DataFrame(memory_rules)
-        mem_cols = [c for c in ["timestamp", "asset", "trade_type", "pnl", "reward_score", "lesson_learned"] if c in mem_df.columns]
-        st.dataframe(mem_df[mem_cols], use_container_width=True, hide_index=True)
-
+    else:
+        st.info("No reflection entries recorded yet in this session.")
