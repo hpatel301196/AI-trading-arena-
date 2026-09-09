@@ -672,3 +672,4 @@ with tab_memory:
         mem_df = pd.DataFrame(memory_rules)
         mem_cols = [c for c in ["timestamp", "asset", "trade_type", "pnl", "reward_score", "lesson_learned"] if c in mem_df.columns]
         st.dataframe(mem_df[mem_cols], use_container_width=True, hide_index=True)
+
