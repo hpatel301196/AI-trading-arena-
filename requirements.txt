@@ -5,3 +5,5 @@ plotly
 streamlit-autorefresh
 supabase
 ccxt
+flask
+gunicorn
