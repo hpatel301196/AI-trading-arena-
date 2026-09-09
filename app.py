@@ -44,7 +44,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-count = st_autorefresh(interval=15000, limit=10000, key="hp_refresh_v5")
+count = st_autorefresh(interval=15000, limit=10000, key="hp_refresh_v6")
 
 @st.cache_resource
 def init_supabase():
@@ -187,10 +187,10 @@ memory_rules = fetch_memory_ledger()
 reinforcement_bias = get_reinforcement_adjustment()
 
 # -------------------------------------------------------------
-# 3. SPECIALIZED QUANT BACKEND & NEWS & TRADER PERSONA SUITE
+# 3. QUANT BACKEND & STRATEGY-BASED AGENT SUITE
 # -------------------------------------------------------------
 
-class ApexVolumeProfilePOCAgent:
+class VolumeProfilePOCAgent:
     @staticmethod
     def analyze(data):
         poc = data["poc"]
@@ -223,7 +223,7 @@ class ApexVolArbAgent:
         else:
             return {"mode": "NORMAL", "score": 50, "note": "Standard volatility channel."}
 
-class ApexNewsAndSentimentSpecialist:
+class NewsAndSentimentSpecialist:
     @staticmethod
     def analyze():
         feeds = [
@@ -235,7 +235,7 @@ class ApexNewsAndSentimentSpecialist:
         chosen = random.choice(feeds)
         return {"headline": chosen[0], "status": chosen[1], "penalty": chosen[2], "sentiment": chosen[3]}
 
-class ApexMacroNLPAgent:
+class MacroNLPAgent:
     @staticmethod
     def analyze():
         headlines = [
@@ -245,49 +245,49 @@ class ApexMacroNLPAgent:
         ]
         return random.choice(headlines)
 
-# Named Expert Trader Personas
-class TraderDaleAgent:
+# Strategy-Based Market Specialists (No personal names)
+class MarketProfileStrategy:
     @staticmethod
     def comment(data):
         comments = [
-            f"Trader Dale: Testing High Volume Node (HVN) at ${data['poc']}. Looking for rejection candle.",
-            f"Trader Dale: Value Area High test. Expecting responsive selling or breakout confirmation.",
-            f"Trader Dale: Low Volume Node (LVN) vacuum. Price will knife through here quickly."
+            f"Profile Strategy: Testing High Volume Node (HVN) at ${data['poc']}. Looking for rejection candle.",
+            f"Profile Strategy: Value Area High test. Expecting responsive selling or breakout confirmation.",
+            f"Profile Strategy: Low Volume Node (LVN) vacuum. Price will knife through here quickly."
         ]
         return random.choice(comments)
 
-class FabioValentiniAgent:
+class InstitutionalOrderFlowStrategy:
     @staticmethod
     def comment():
         comments = [
-            "Fabio Valentini: Smart money iceberg orders showing up on level 2. Accumulation phase verified.",
-            "Fabio Valentini: Dark pool prints indicate large institutional block hedging.",
-            "Fabio Valentini: Retail trap setup forming. Order book imbalance favored to the sell side."
+            "Order Flow Strategy: Smart money iceberg orders showing up on level 2. Accumulation phase verified.",
+            "Order Flow Strategy: Dark pool prints indicate large institutional block hedging.",
+            "Order Flow Strategy: Retail trap setup forming. Order book imbalance favored to sell side."
         ]
         return random.choice(comments)
 
-class TraderYushAgent:
+class MomentumVelocityStrategy:
     @staticmethod
     def comment(vol_ratio):
-        return f"Trader Yush: Delta expansion speed at {vol_ratio}x velocity. Momentum traders taking control."
+        return f"Momentum Strategy: Delta expansion speed at {vol_ratio}x velocity. Momentum traders taking control."
 
-class KeshavTradesAgent:
+class BreakoutScalpStrategy:
     @staticmethod
     def comment():
         comments = [
-            "Keshav Trades: Breakout channel squeeze coiled. Ready for immediate scalping execution.",
-            "Keshav Trades: Moving average crossover validation confirmed on intraday timeframe."
+            "Breakout Strategy: Channel squeeze coiled. Ready for immediate scalping execution.",
+            "Breakout Strategy: Moving average crossover validation confirmed on intraday timeframe."
         ]
         return random.choice(comments)
 
-class AndreaCimiAgent:
+class RiskManagementStrategy:
     @staticmethod
     def comment():
-        return "Andrea Cimi: Risk management parameters verified. Margin utilization within safe institutional bounds."
+        return "Risk Guard Strategy: Risk parameters verified. Margin utilization within safe institutional bounds."
 
 
 # -------------------------------------------------------------
-# 4. WAR ROOM DELIBERATION (BALANCED WEIGHTED SUITE)
+# 4. WAR ROOM DELIBERATION
 # -------------------------------------------------------------
 def run_hp_deliberation(asset, data, memory):
     current_time = time.time()
@@ -301,21 +301,18 @@ def run_hp_deliberation(asset, data, memory):
         cached["price"] = price
         return cached
 
-    # Run Quantitative Backend & News Specialists
-    poc_bot = ApexVolumeProfilePOCAgent.analyze(data)
+    poc_bot = VolumeProfilePOCAgent.analyze(data)
     whale_bot = ApexWhaleTrackerAgent.analyze(vol_ratio)
     vol_bot = ApexVolArbAgent.analyze(vol_ratio)
-    news_bot = ApexNewsAndSentimentSpecialist.analyze()
-    macro_nlp_text = ApexMacroNLPAgent.analyze()
+    news_bot = NewsAndSentimentSpecialist.analyze()
+    macro_nlp_text = MacroNLPAgent.analyze()
 
-    # Run Named Trader Personas
-    dale_comm = TraderDaleAgent.comment(data)
-    fabio_comm = FabioValentiniAgent.comment()
-    yush_comm = TraderYushAgent.comment(vol_ratio)
-    keshav_comm = KeshavTradesAgent.comment()
-    andrea_comm = AndreaCimiAgent.comment()
+    profile_comm = MarketProfileStrategy.comment(data)
+    flow_comm = InstitutionalOrderFlowStrategy.comment()
+    momentum_comm = MomentumVelocityStrategy.comment(vol_ratio)
+    breakout_comm = BreakoutScalpStrategy.comment()
+    risk_comm = RiskManagementStrategy.comment()
 
-    # Balanced Weighted Composite Score Calculation
     learning_adjustment = reinforcement_bias
 
     weighted_score = (
@@ -363,9 +360,9 @@ def run_hp_deliberation(asset, data, memory):
         "score": final_score, "decision": decision, "is_stale": data.get("is_stale", False),
         "limit_entry": limit_entry, "target_price": target_price, "stop_price": stop_price,
         "poc_note": poc_bot["note"], "whale_note": whale_bot["note"], "news_note": news_bot["headline"], "macro_nlp": macro_nlp_text,
-        "dale": dale_comm, "fabio": fabio_comm, "yush": yush_comm, "keshav": keshav_comm, "andrea": andrea_comm,
+        "profile_comm": profile_comm, "flow_comm": flow_comm, "momentum_comm": momentum_comm, "breakout_comm": breakout_comm, "risk_comm": risk_comm,
         "poc": data.get("poc"),
-        "bull": f"Trader Dale & Whale Tracker Consensus: {poc_bot['note']} {whale_bot['note']}",
+        "bull": f"Profile Strategy & Whale Tracker Consensus: {poc_bot['note']} {whale_bot['note']}",
         "bear": f"News Sentiment & Volatility Check: {news_bot['headline']} Reinforcement factor: {learning_adjustment:+.1f}."
     }
     
@@ -385,13 +382,13 @@ if len(st.session_state.debate_transcripts) == 0 or st.session_state.debate_tran
         "asset": active_delib["asset"], "persona": active_delib["persona"],
         "score": active_delib["score"], "decision": active_delib["decision"],
         "poc_note": active_delib["poc_note"], "whale_note": active_delib["whale_note"],
-        "news_note": active_delib["news_note"], "dale": active_delib["dale"],
+        "news_note": active_delib["news_note"], "strategy": active_delib["profile_comm"],
         "bull": active_delib["bull"], "bear": active_delib["bear"],
         "entry": active_delib["limit_entry"], "target": active_delib["target_price"], "stop": active_delib["stop_price"]
     })
 
 # -------------------------------------------------------------
-# 5. EXECUTION ENGINE WITH REINFORCEMENT FEEDBACK LOOP
+# 5. EXECUTION ENGINE
 # -------------------------------------------------------------
 def execute_hp_trades(delibrations_dict):
     res = supabase.table("agent_portfolio").select("*").eq("agent_id", "HP_Advanced_Fund").execute()
@@ -578,7 +575,7 @@ with tab_portfolio:
             st.dataframe(df[cols_to_show], use_container_width=True, hide_index=True)
 
 with tab_room:
-    st.subheader("⚔️ Multi-Agent Intelligence (Specialist Quant Bots + News & Trader Personas)")
+    st.subheader("⚔️ Multi-Agent Intelligence (Specialist Quant & Strategy Engines)")
     
     grid = st.columns(2)
     for idx, (asset_name, delib_data) in enumerate(deliberations.items()):
@@ -606,12 +603,12 @@ with tab_room:
                     • 🐋 <b>Apex Whale Tracker Specialist:</b> {delib_data['whale_note']}<br>
                     • 📰 <b>News & Sentiment Specialist:</b> {delib_data['news_note']}<br>
                     • 🌐 <b>Macro NLP Feedback Bot:</b> {delib_data['macro_nlp']}<br><br>
-                    <b>Named Trader Personas:</b><br>
-                    • 🎩 <b>{delib_data['dale']}</b><br>
-                    • 🐋 <b>{delib_data['fabio']}</b><br>
-                    • ⚡ <b>{delib_data['yush']}</b><br>
-                    • 🚀 <b>{delib_data['keshav']}</b><br>
-                    • 🛡️ <b>{delib_data['andrea']}</b><br><br>
+                    <b>Strategy Execution Engines:</b><br>
+                    • 📈 <b>{delib_data['profile_comm']}</b><br>
+                    • 🐋 <b>{delib_data['flow_comm']}</b><br>
+                    • ⚡ <b>{delib_data['momentum_comm']}</b><br>
+                    • 🚀 <b>{delib_data['breakout_comm']}</b><br>
+                    • 🛡️ <b>{delib_data['risk_comm']}</b><br><br>
                     🎯 <b>Limit Entry:</b> ${delib_data['limit_entry']:,.2f} | <b>Target:</b> ${delib_data['target_price']:,.2f} | <b>Stop:</b> ${delib_data['stop_price']:,.2f}
                 </div>
                 <div class="bull-box" style="margin-top:6px;">{delib_data['bull']}</div>
