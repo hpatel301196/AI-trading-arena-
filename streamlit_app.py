@@ -45,7 +45,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-count = st_autorefresh(interval=15000, limit=10000, key="hp_refresh_v7")
+count = st_autorefresh(interval=15000, limit=10000, key="hp_refresh_v8")
 
 @st.cache_resource
 def init_supabase():
@@ -76,10 +76,6 @@ if "debate_transcripts" not in st.session_state:
     st.session_state.debate_transcripts = []
 if "reflection_history" not in st.session_state:
     st.session_state.reflection_history = []
-if "cached_deliberations" not in st.session_state:
-    st.session_state.cached_deliberations = {}
-if "last_signal_reset" not in st.session_state:
-    st.session_state.last_signal_reset = time.time()
 if "price_buffer" not in st.session_state:
     st.session_state.price_buffer = {}
 
@@ -291,20 +287,14 @@ class RiskManagementStrategy:
 
 
 # -------------------------------------------------------------
-# 5. WAR ROOM DELIBERATION
+# 5. WAR ROOM DELIBERATION (REAL-TIME RE-EVALUATION)
 # -------------------------------------------------------------
 def run_hp_deliberation(asset, data, memory):
-    current_time = time.time()
     price = data["price"]
     atr = data["atr"]
     mtf_trend = data["mtf_trend"]
     vol_ratio = data["vol_ratio"]
     
-    if asset in st.session_state.cached_deliberations and (current_time - st.session_state.last_signal_reset < 300):
-        cached = st.session_state.cached_deliberations[asset]
-        cached["price"] = price
-        return cached
-
     poc_bot = VolumeProfilePOCAgent.analyze(data)
     whale_bot = ApexWhaleTrackerAgent.analyze(vol_ratio)
     vol_bot = ApexVolArbAgent.analyze(vol_ratio)
@@ -369,19 +359,13 @@ def run_hp_deliberation(asset, data, memory):
         "bull": f"Profile Strategy & Whale Tracker Consensus: {poc_bot['note']} {whale_bot['note']}",
         "bear": f"News Sentiment & Volatility Check: {news_bot['headline']} Reinforcement factor: {learning_adjustment:+.1f}."
     }
-    
-    st.session_state.cached_deliberations[asset] = result
     return result
-
-if time.time() - st.session_state.last_signal_reset > 300:
-    st.session_state.cached_deliberations = {}
-    st.session_state.last_signal_reset = time.time()
 
 deliberations = {asset: run_hp_deliberation(asset, market_snapshot[asset], memory_rules) for asset in market_snapshot if asset in market_snapshot}
 
 if deliberations:
     active_delib = max(deliberations.values(), key=lambda x: abs(x["score"] - 50))
-    if len(st.session_state.debate_transcripts) == 0 or st.session_state.debate_transcripts[0]["asset"] != active_delib["asset"]:
+    if len(st.session_state.debate_transcripts) == 0 or st.session_state.debate_transcripts[0]["asset"] != active_delib["asset"] or st.session_state.debate_transcripts[0]["score"] != active_delib["score"]:
         st.session_state.debate_transcripts.insert(0, {
             "time": datetime.now().strftime("%H:%M:%S"),
             "asset": active_delib["asset"], "persona": active_delib["persona"],
@@ -393,7 +377,7 @@ if deliberations:
         })
 
 # -------------------------------------------------------------
-# 6. EXECUTION ENGINE
+# 6. EXECUTION ENGINE & AUTONOMOUS MOMENTUM MANAGEMENT
 # -------------------------------------------------------------
 def execute_hp_trades(delibrations_dict):
     res = supabase.table("agent_portfolio").select("*").eq("agent_id", "HP_Advanced_Fund").execute()
@@ -427,6 +411,7 @@ def execute_hp_trades(delibrations_dict):
 
         exit_triggered, exit_reason = False, ""
 
+        # Hard target / stop triggers
         if pos_type == "LONG":
             if current_p >= target_p:
                 exit_triggered, exit_reason = True, f"Dynamic Profit Target Reached (${target_p})"
@@ -438,6 +423,16 @@ def execute_hp_trades(delibrations_dict):
             elif current_p >= stop_p:
                 exit_triggered, exit_reason = True, f"Dynamic Short Stop Loss Triggered (${stop_p})"
 
+        # Autonomous Momentum Intelligence Check: If in profit and momentum dies / reverses, secure profit immediately!
+        current_asset_delib = delibrations_dict.get(held_asset, {})
+        current_score = current_asset_delib.get("score", 50)
+
+        if pnl_pct > 0.15:  # Active trade is in profit
+            if pos_type == "LONG" and current_score < 48:
+                exit_triggered, exit_reason = True, f"Autonomous Momentum Lock-In (Score dropped to {current_score}%, fading momentum)"
+            elif pos_type == "SHORT" and current_score > 52:
+                exit_triggered, exit_reason = True, f"Autonomous Momentum Lock-In (Score rose to {current_score}%, reversing momentum)"
+
         if trade_duration_minutes >= 25.0 and -0.4 < pnl_pct < 0.6:
             exit_triggered, exit_reason = True, f"Time-Horizon Stagnation Release ({trade_duration_minutes:.1f}m)"
 
@@ -447,7 +442,7 @@ def execute_hp_trades(delibrations_dict):
 
             reward_score = 100 if realized_pnl > 0 else -50
             reflection = f"REINFORCEMENT: {pos_type} trade on {held_asset} closed at {pnl_pct:+.2f}%. Reason: {exit_reason}."
-            lesson = f"Auto-exit execution validated."
+            lesson = f"Autonomous intelligence execution validated."
 
             store_advanced_self_reflection(held_asset, pos_type, realized_pnl, reflection, lesson, reward_score)
             st.session_state.reflection_history.insert(0, {"time": datetime.now().strftime("%H:%M:%S"), "reflection": reflection, "lesson": lesson, "reward": reward_score})
@@ -461,7 +456,7 @@ def execute_hp_trades(delibrations_dict):
                 "size": units, "price": current_p, "pnl": realized_pnl, "trade_num": trades_today + 1
             }).execute()
 
-            send_telegram_alert(f"🔴 *Position Terminated: {pos_type} {held_asset}*\nRealized PnL: `${realized_pnl:,.2f}` ({pnl_pct:+.2f}%)\nReason: {exit_reason}")
+            send_telegram_alert(f"🔴 *Autonomous Position Terminated: {pos_type} {held_asset}*\nRealized PnL: `${realized_pnl:,.2f}` ({pnl_pct:+.2f}%)\nReason: {exit_reason}")
 
     elif pos is None and trades_today < 12:
         valid_candidates = [d for d in delibrations_dict.values() if d["decision"] in ["BUY_LONG", "SELL_SHORT"] and not d.get("is_stale", False)]
@@ -656,16 +651,21 @@ with tab_transcripts:
         """, unsafe_allow_html=True)
 
 with tab_memory:
-    st.subheader("🧠 Advanced Reinforcement Memory Ledger")
-    ref_history = st.session_state.reflection_history
-    if len(ref_history) > 0:
-        for r in ref_history[:10]:
+    st.subheader("🧠 Advanced Reinforcement Memory Ledger (Database & Session)")
+    db_memories = fetch_memory_ledger()
+    
+    if len(db_memories) > 0:
+        for mem in db_memories:
+            reward = int(mem.get('reward_score', 0))
+            reward_color = "#A78BFA" if reward >= 0 else "#EF4444"
             st.markdown(f"""
             <div class="reflection-box">
-                <div style="font-size:12px; color:#A78BFA; font-weight:bold;">[{r['time']}] Reward Score: {r['reward']}</div>
-                <div style="font-size:12px; margin-top:4px;"><b>Reflection:</b> {r['reflection']}</div>
-                <div style="font-size:12px; margin-top:2px; color:#38BDF8;"><b>Lesson Learned:</b> {r['lesson']}</div>
+                <div style="font-size:12px; color:{reward_color}; font-weight:bold;">
+                    Asset: {mem.get('asset')} ({mem.get('trade_type')}) | PnL: ${float(mem.get('pnl', 0)):+,.2f} | Reward Score: {reward}
+                </div>
+                <div style="font-size:12px; margin-top:4px;"><b>Reflection:</b> {mem.get('reflection_notes')}</div>
+                <div style="font-size:12px; margin-top:2px; color:#38BDF8;"><b>Lesson Learned:</b> {mem.get('lesson_learned')}</div>
             </div>
             """, unsafe_allow_html=True)
     else:
-        st.info("No reflection entries recorded yet in this session.")
+        st.info("No reflection entries recorded in the database yet.")
