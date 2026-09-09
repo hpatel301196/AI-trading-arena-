@@ -44,7 +44,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-count = st_autorefresh(interval=15000, limit=10000, key="hp_refresh_v6")
+count = st_autorefresh(interval=15000, limit=10000, key="hp_refresh_v7")
 
 @st.cache_resource
 def init_supabase():
@@ -81,7 +81,20 @@ if "price_buffer" not in st.session_state:
     st.session_state.price_buffer = {}
 
 # -------------------------------------------------------------
-# 2. AUTOMATED MARKET DATA STREAM
+# 2. SIDEBAR ASSET TOGGLE SWITCHES
+# -------------------------------------------------------------
+st.sidebar.markdown("### 🎛️ Asset Kill-Switches")
+st.sidebar.write("Toggle specific asset engines ON or OFF to isolate your trading focus.")
+
+asset_toggles = {
+    "Bitcoin": st.sidebar.checkbox("🟢 Trade Bitcoin (BTC)", value=True),
+    "Ethereum": st.sidebar.checkbox("🟢 Trade Ethereum (ETH)", value=True),
+    "Gold": st.sidebar.checkbox("🟡 Trade Gold (GC)", value=True),
+    "Silver": st.sidebar.checkbox("🟡 Trade Silver (SI)", value=True)
+}
+
+# -------------------------------------------------------------
+# 3. AUTOMATED MARKET DATA STREAM
 # -------------------------------------------------------------
 def fetch_hp_market_data():
     market_data = {}
@@ -97,6 +110,9 @@ def fetch_hp_market_data():
     base_prices = {"Bitcoin": 65000.0, "Ethereum": 3500.0, "Gold": 2740.0, "Silver": 31.50}
     
     for name, symbol in tickers.items():
+        if not asset_toggles.get(name, True):
+            continue
+            
         try:
             t = yf.Ticker(symbol)
             hist_15m = t.history(period="5d", interval="15m")
@@ -187,7 +203,7 @@ memory_rules = fetch_memory_ledger()
 reinforcement_bias = get_reinforcement_adjustment()
 
 # -------------------------------------------------------------
-# 3. QUANT BACKEND & STRATEGY-BASED AGENT SUITE
+# 4. QUANT BACKEND & STRATEGY-BASED AGENT SUITE
 # -------------------------------------------------------------
 
 class VolumeProfilePOCAgent:
@@ -245,26 +261,15 @@ class MacroNLPAgent:
         ]
         return random.choice(headlines)
 
-# Strategy-Based Market Specialists (No personal names)
 class MarketProfileStrategy:
     @staticmethod
     def comment(data):
-        comments = [
-            f"Profile Strategy: Testing High Volume Node (HVN) at ${data['poc']}. Looking for rejection candle.",
-            f"Profile Strategy: Value Area High test. Expecting responsive selling or breakout confirmation.",
-            f"Profile Strategy: Low Volume Node (LVN) vacuum. Price will knife through here quickly."
-        ]
-        return random.choice(comments)
+        return f"Profile Strategy: Testing High Volume Node (HVN) at ${data['poc']}. Looking for rejection candle."
 
 class InstitutionalOrderFlowStrategy:
     @staticmethod
     def comment():
-        comments = [
-            "Order Flow Strategy: Smart money iceberg orders showing up on level 2. Accumulation phase verified.",
-            "Order Flow Strategy: Dark pool prints indicate large institutional block hedging.",
-            "Order Flow Strategy: Retail trap setup forming. Order book imbalance favored to sell side."
-        ]
-        return random.choice(comments)
+        return "Order Flow Strategy: Smart money iceberg orders showing up on level 2. Accumulation phase verified."
 
 class MomentumVelocityStrategy:
     @staticmethod
@@ -274,11 +279,7 @@ class MomentumVelocityStrategy:
 class BreakoutScalpStrategy:
     @staticmethod
     def comment():
-        comments = [
-            "Breakout Strategy: Channel squeeze coiled. Ready for immediate scalping execution.",
-            "Breakout Strategy: Moving average crossover validation confirmed on intraday timeframe."
-        ]
-        return random.choice(comments)
+        return "Breakout Strategy: Channel squeeze coiled. Ready for immediate scalping execution."
 
 class RiskManagementStrategy:
     @staticmethod
@@ -287,7 +288,7 @@ class RiskManagementStrategy:
 
 
 # -------------------------------------------------------------
-# 4. WAR ROOM DELIBERATION
+# 5. WAR ROOM DELIBERATION
 # -------------------------------------------------------------
 def run_hp_deliberation(asset, data, memory):
     current_time = time.time()
@@ -373,22 +374,23 @@ if time.time() - st.session_state.last_signal_reset > 300:
     st.session_state.cached_deliberations = {}
     st.session_state.last_signal_reset = time.time()
 
-deliberations = {asset: run_hp_deliberation(asset, market_snapshot[asset], memory_rules) for asset in market_snapshot}
+deliberations = {asset: run_hp_deliberation(asset, market_snapshot[asset], memory_rules) for asset in market_snapshot if asset in market_snapshot}
 
-active_delib = max(deliberations.values(), key=lambda x: abs(x["score"] - 50))
-if len(st.session_state.debate_transcripts) == 0 or st.session_state.debate_transcripts[0]["asset"] != active_delib["asset"]:
-    st.session_state.debate_transcripts.insert(0, {
-        "time": datetime.now().strftime("%H:%M:%S"),
-        "asset": active_delib["asset"], "persona": active_delib["persona"],
-        "score": active_delib["score"], "decision": active_delib["decision"],
-        "poc_note": active_delib["poc_note"], "whale_note": active_delib["whale_note"],
-        "news_note": active_delib["news_note"], "strategy": active_delib["profile_comm"],
-        "bull": active_delib["bull"], "bear": active_delib["bear"],
-        "entry": active_delib["limit_entry"], "target": active_delib["target_price"], "stop": active_delib["stop_price"]
-    })
+if deliberations:
+    active_delib = max(deliberations.values(), key=lambda x: abs(x["score"] - 50))
+    if len(st.session_state.debate_transcripts) == 0 or st.session_state.debate_transcripts[0]["asset"] != active_delib["asset"]:
+        st.session_state.debate_transcripts.insert(0, {
+            "time": datetime.now().strftime("%H:%M:%S"),
+            "asset": active_delib["asset"], "persona": active_delib["persona"],
+            "score": active_delib["score"], "decision": active_delib["decision"],
+            "poc_note": active_delib["poc_note"], "whale_note": active_delib["whale_note"],
+            "news_note": active_delib["news_note"], "strategy": active_delib["profile_comm"],
+            "bull": active_delib["bull"], "bear": active_delib["bear"],
+            "entry": active_delib["limit_entry"], "target": active_delib["target_price"], "stop": active_delib["stop_price"]
+        })
 
 # -------------------------------------------------------------
-# 5. EXECUTION ENGINE
+# 6. EXECUTION ENGINE
 # -------------------------------------------------------------
 def execute_hp_trades(delibrations_dict):
     res = supabase.table("agent_portfolio").select("*").eq("agent_id", "HP_Advanced_Fund").execute()
@@ -411,7 +413,7 @@ def execute_hp_trades(delibrations_dict):
         entry_price = float(pos["entry_price"])
         pos_type = pos.get("type", "LONG")
         units = float(pos["units"])
-        current_p = market_snapshot[held_asset]["price"]
+        current_p = market_snapshot.get(held_asset, {"price": entry_price})["price"]
         target_p = float(pos["target_price"])
         stop_p = float(pos["stop_price"])
         
@@ -440,14 +442,9 @@ def execute_hp_trades(delibrations_dict):
             realized_pnl = round((pnl_pct / 100.0) * (units * entry_price), 2)
             net_cash = round(cash + (units * current_p) if pos_type == "LONG" else cash + (units * entry_price) + (units * (entry_price - current_p)), 2)
 
-            if realized_pnl > 0:
-                reward_score = 100
-                reflection = f"REINFORCEMENT SUCCESS: {pos_type} trade on {held_asset} secured +{pnl_pct:.2f}% profit. POC, Whale & News models validated."
-                lesson = f"POSITIVE REINFORCEMENT: Institutional flow models active and precise. Confidence boosted."
-            else:
-                reward_score = -50
-                reflection = f"REINFORCEMENT CORRECTION: {pos_type} trade on {held_asset} closed at {pnl_pct:.2f}% loss. Trigger: {exit_reason}."
-                lesson = f"NEGATIVE REINFORCEMENT: Order flow deviation at breakout. Tightening stop parameters."
+            reward_score = 100 if realized_pnl > 0 else -50
+            reflection = f"REINFORCEMENT: {pos_type} trade on {held_asset} closed at {pnl_pct:+.2f}%. Reason: {exit_reason}."
+            lesson = f"Auto-exit execution validated."
 
             store_advanced_self_reflection(held_asset, pos_type, realized_pnl, reflection, lesson, reward_score)
             st.session_state.reflection_history.insert(0, {"time": datetime.now().strftime("%H:%M:%S"), "reflection": reflection, "lesson": lesson, "reward": reward_score})
@@ -495,7 +492,7 @@ trade_ledger = supabase.table("trade_ledger_history").select("*").order("id", de
 portfolio_state = supabase.table("agent_portfolio").select("*").eq("agent_id", "HP_Advanced_Fund").execute().data
 
 # -------------------------------------------------------------
-# 6. APP INTERFACE LAYOUT
+# 7. APP INTERFACE LAYOUT
 # -------------------------------------------------------------
 st.markdown(f"""
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
@@ -538,7 +535,7 @@ with tab_portfolio:
             if pos:
                 held_asset = pos["asset"]
                 entry_p = float(pos["entry_price"])
-                curr_p = market_snapshot[held_asset]["price"]
+                curr_p = market_snapshot.get(held_asset, {"price": entry_p})["price"]
                 units = float(pos["units"])
                 pos_type = pos.get("type", "LONG")
                 duration_m = (time.time() - float(pos.get("entry_timestamp", time.time()))) / 60.0
@@ -564,6 +561,26 @@ with tab_portfolio:
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
+                
+                # Manual Override: Force Close Button
+                if st.button("🚨 Force Close Position Now (Manual Override)", type="primary"):
+                    realized_pnl_manual = round((live_pnl_pct / 100.0) * (units * entry_p), 2)
+                    net_cash_manual = round(cash_bal + (units * curr_p) if pos_type == "LONG" else cash_bal + (units * entry_p) + (units * (entry_p - curr_p)), 2)
+                    
+                    supabase.table("agent_portfolio").update({
+                        "cash": net_cash_manual, "current_position": None, "trades_today": fund_data.get("trades_today", 0) + 1, "total_pnl": realized_pnl_manual
+                    }).eq("agent_id", "HP_Advanced_Fund").execute()
+
+                    supabase.table("trade_ledger_history").insert({
+                        "agent_id": "HP_Advanced_Fund", "asset": held_asset, "action": f"MANUAL_CLOSE_{pos_type}",
+                        "size": units, "price": curr_p, "pnl": realized_pnl_manual, "trade_num": fund_data.get("trades_today", 0) + 1
+                    }).execute()
+
+                    store_advanced_self_reflection(held_asset, pos_type, realized_pnl_manual, f"Manual override close executed on {held_asset}.", "Manual human intervention closed position.", 50 if realized_pnl_manual >= 0 else -20)
+                    send_telegram_alert(f"⚠️ *Manual Override Close Executed*\nAsset: {held_asset} | Realized PnL: `${realized_pnl_manual:,.2f}`")
+                    st.success("Position closed successfully! Refreshing app...")
+                    time.sleep(1)
+                    st.rerun()
             else:
                 st.info("Active Position: 100% Cash / Scanning High-Conviction Setups")
 
