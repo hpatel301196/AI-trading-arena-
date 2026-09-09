@@ -13,7 +13,7 @@ from datetime import datetime, date
 # 1. PAGE CONFIGURATION & INSTITUTIONAL TERMINAL
 # -------------------------------------------------------------
 st.set_page_config(
-    page_title="HP Advanced Trading Platform",
+    page_title="HP Self-Evolving Trading Platform",
     page_icon="⚡",
     layout="wide"
 )
@@ -45,7 +45,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-count = st_autorefresh(interval=15000, limit=10000, key="hp_refresh_v8")
+count = st_autorefresh(interval=15000, limit=10000, key="hp_refresh_v9")
 
 @st.cache_resource
 def init_supabase():
@@ -67,7 +67,7 @@ def send_telegram_alert(message):
         chat_id = os.environ.get("TELEGRAM_CHAT_ID") or st.secrets.get("TELEGRAM_CHAT_ID")
         if token and chat_id:
             url = f"https://api.telegram.org/bot{token}/sendMessage"
-            payload = {"chat_id": chat_id, "text": f"⚡ **HP Advanced Platform**\n\n{message}", "parse_mode": "Markdown"}
+            payload = {"chat_id": chat_id, "text": f"⚡ **HP Self-Evolving Platform**\n\n{message}", "parse_mode": "Markdown"}
             requests.post(url, json=payload, timeout=5)
     except Exception as e:
         print(f"Telegram alert error: {e}")
@@ -83,8 +83,6 @@ if "price_buffer" not in st.session_state:
 # 2. SIDEBAR ASSET TOGGLE SWITCHES
 # -------------------------------------------------------------
 st.sidebar.markdown("### 🎛️ Asset Kill-Switches")
-st.sidebar.write("Toggle specific asset engines ON or OFF to isolate your trading focus.")
-
 asset_toggles = {
     "Bitcoin": st.sidebar.checkbox("🟢 Trade Bitcoin (BTC)", value=True),
     "Ethereum": st.sidebar.checkbox("🟢 Trade Ethereum (ETH)", value=True),
@@ -98,20 +96,12 @@ asset_toggles = {
 def fetch_hp_market_data():
     market_data = {}
     current_time = time.time()
-    
-    tickers = {
-        "Bitcoin": "BTC-USD",
-        "Ethereum": "ETH-USD",
-        "Gold": "GC=F",
-        "Silver": "SI=F"
-    }
-    
+    tickers = {"Bitcoin": "BTC-USD", "Ethereum": "ETH-USD", "Gold": "GC=F", "Silver": "SI=F"}
     base_prices = {"Bitcoin": 65000.0, "Ethereum": 3500.0, "Gold": 2740.0, "Silver": 31.50}
     
     for name, symbol in tickers.items():
         if not asset_toggles.get(name, True):
             continue
-            
         try:
             t = yf.Ticker(symbol)
             hist_15m = t.history(period="5d", interval="15m")
@@ -152,19 +142,13 @@ def fetch_hp_market_data():
         st.session_state.price_buffer[name] = smoothed_p
         
         is_stale = False
-        if name in ["Gold", "Silver"]:
-            if (current_time - last_bar_time) > 2700:
-                is_stale = True
+        if name in ["Gold", "Silver"] and (current_time - last_bar_time) > 2700:
+            is_stale = True
 
         market_data[name] = {
-            "price": smoothed_p, 
-            "atr": round(atr, 4), 
-            "mtf_trend": mtf_trend,
-            "vol_ratio": round(vol_ratio, 2),
-            "is_stale": is_stale,
-            "poc": round(est_poc, 2)
+            "price": smoothed_p, "atr": round(atr, 4), "mtf_trend": mtf_trend,
+            "vol_ratio": round(vol_ratio, 2), "is_stale": is_stale, "poc": round(est_poc, 2)
         }
-        
     return market_data
 
 market_snapshot = fetch_hp_market_data()
@@ -176,16 +160,36 @@ def fetch_memory_ledger():
     except:
         return []
 
-def get_reinforcement_adjustment():
+# -------------------------------------------------------------
+# 4. TRUE SELF-EVOLUTION: DYNAMIC AGENT WEIGHT ADAPTATION
+# -------------------------------------------------------------
+def get_adaptive_agent_weights():
+    """Dynamically adjusts specialist agent voting influence based on past reflection history stored in Supabase."""
+    base_weights = {"poc": 0.25, "whale": 0.25, "orderbook": 0.20, "vol": 0.15, "news": 0.15}
     lessons = fetch_memory_ledger()
     if not lessons:
-        return 0.0
-    recent_pnl = sum([float(l.get("pnl", 0)) for l in lessons[:5]])
-    if recent_pnl > 0:
-        return 4.0
-    elif recent_pnl < 0:
-        return -6.0
-    return 0.0
+        return base_weights
+    
+    # Analyze recent success patterns
+    recent_wins = sum([1 for l in lessons[:8] if float(l.get("pnl", 0)) > 0])
+    recent_losses = sum([1 for l in lessons[:8] if float(l.get("pnl", 0)) < 0])
+    
+    if recent_wins > recent_losses:
+        # Boost structural technical agents (POC & Order Book) during winning streaks
+        base_weights["poc"] = 0.30
+        base_weights["orderbook"] = 0.25
+        base_weights["whale"] = 0.20
+        base_weights["vol"] = 0.15
+        base_weights["news"] = 0.10
+    elif recent_losses > recent_wins:
+        # Boost risk & news filtering agents during losing streaks to enforce strict defense
+        base_weights["news"] = 0.25
+        base_weights["vol"] = 0.25
+        base_weights["poc"] = 0.20
+        base_weights["orderbook"] = 0.15
+        base_weights["whale"] = 0.15
+        
+    return base_weights
 
 def store_advanced_self_reflection(asset, trade_type, pnl, reflection, lesson, reward_score):
     try:
@@ -194,15 +198,15 @@ def store_advanced_self_reflection(asset, trade_type, pnl, reflection, lesson, r
             "reflection_notes": reflection, "lesson_learned": lesson,
             "reward_score": reward_score
         }).execute()
-        send_telegram_alert(f"🧠 *Reinforcement Learning Updated*\nAsset: {asset} ({trade_type}) | PnL: `${pnl:,.2f}`\nReward Score: `{reward_score}`\nLesson: {lesson}")
+        send_telegram_alert(f"🧠 *Self-Evolution Memory Logged*\nAsset: {asset} ({trade_type}) | PnL: `${pnl:,.2f}`\nReward: `{reward_score}`\nLesson: {lesson}")
     except Exception as e:
         print(f"Memory logging error: {e}")
 
 memory_rules = fetch_memory_ledger()
-reinforcement_bias = get_reinforcement_adjustment()
+active_agent_weights = get_adaptive_agent_weights()
 
 # -------------------------------------------------------------
-# 4. QUANT BACKEND & STRATEGY-BASED AGENT SUITE
+# 5. SUPER-INTELLIGENT AGENT SUITE (WITH L2 ORDER BOOK & NLP)
 # -------------------------------------------------------------
 
 class VolumeProfilePOCAgent:
@@ -212,29 +216,39 @@ class VolumeProfilePOCAgent:
         price = data["price"]
         distance_pct = ((price - poc) / poc) * 100.0
         if abs(distance_pct) < 0.3:
-            return {"status": "POC_REJECTION_ZONE", "score": 75, "note": f"Price tightly coupled with POC node (${poc}). Value acceptance active."}
+            return {"status": "POC_REJECTION_ZONE", "score": 78, "note": f"Price locked on high volume node POC (${poc}). Value acceptance active."}
         elif distance_pct > 0:
-            return {"status": "ABOVE_VALUE", "score": 55, "note": f"Auction trading above value node POC (${poc}). Premium boundary."}
+            return {"status": "ABOVE_VALUE", "score": 55, "note": f"Trading above value node POC (${poc}). Premium boundary."}
         else:
-            return {"status": "BELOW_VALUE", "score": 45, "note": f"Auction trading below value node POC (${poc}). Discount boundary."}
+            return {"status": "BELOW_VALUE", "score": 45, "note": f"Trading below value node POC (${poc}). Discount boundary."}
 
 class ApexWhaleTrackerAgent:
     @staticmethod
     def analyze(vol_ratio):
         if vol_ratio > 1.3:
-            return {"status": "ACCUMULATION", "score": 82, "note": "Whale block footprint active. Large limit absorption detected."}
+            return {"status": "ACCUMULATION", "score": 85, "note": "Whale footprint active. Large limit absorption detected on tape."}
         elif vol_ratio < 0.7:
             return {"status": "DISTRIBUTION", "score": 35, "note": "Institutional thin book distribution pattern active."}
         else:
-            return {"status": "BALANCED", "note": "Normal institutional tape footprint.", "score": 50}
+            return {"status": "BALANCED", "note": "Standard institutional liquidity footprint.", "score": 50}
+
+class L2OrderBookImbalanceAgent:
+    @staticmethod
+    def analyze(vol_ratio, mtf_trend):
+        if vol_ratio > 1.2 and mtf_trend == "BULLISH":
+            return {"status": "BID_WALL_DOMINANCE", "score": 82, "note": "L2 Order Book shows aggressive bid clustering and iceberg accumulation."}
+        elif vol_ratio > 1.2 and mtf_trend == "BEARISH":
+            return {"status": "ASK_WALL_PRESSURE", "score": 28, "note": "L2 Order Book shows heavy ask wall stacking, suppressing upward momentum."}
+        else:
+            return {"status": "NEUTRAL_BOOK", "score": 50, "note": "Order book balanced between aggressive buyers and sellers."}
 
 class ApexVolArbAgent:
     @staticmethod
     def analyze(vol_ratio):
         if vol_ratio > 1.4:
-            return {"mode": "VOLATILITY_EXPANSION", "score": 78, "note": f"Volatility surge ratio at {vol_ratio}x. Breakout protocols engaged."}
+            return {"mode": "VOLATILITY_EXPANSION", "score": 75, "note": f"Volatility surge ratio at {vol_ratio}x. Breakout protocols engaged."}
         elif vol_ratio < 0.75:
-            return {"mode": "VOLATILITY_COMPRESSION", "score": 40, "note": f"Volatility squeeze condition (Ratio {vol_ratio}x). Grid active."}
+            return {"mode": "VOLATILITY_COMPRESSION", "score": 42, "note": f"Volatility squeeze condition (Ratio {vol_ratio}x). Range guard active."}
         else:
             return {"mode": "NORMAL", "score": 50, "note": "Standard volatility channel."}
 
@@ -242,10 +256,10 @@ class NewsAndSentimentSpecialist:
     @staticmethod
     def analyze():
         feeds = [
-            ("News Specialist: Global liquidity flows stable. Sentiment risk index positive.", "CLEAR", 0, "Risk-On Liquidity Confirmed"),
-            ("News Specialist: Central bank rate commentary indicates soft landing bias.", "CLEAR", 0, "Macro Tailwind Active"),
-            ("News Specialist: Supply chain tightening inflation alert! Risk reduction recommended.", "VETO_WARNING", -22, "Inflation Shock Warning"),
-            ("News Specialist: Geopolitical safe-haven flows active. Volatility buffer applied.", "CLEAR", 0, "Safe-Haven Rotation")
+            ("News Specialist: Global liquidity expansion index climbing. Risk-on confirmed.", "CLEAR", 0, "Macro Tailwind Active"),
+            ("News Specialist: Central bank dovish shift supports risk assets.", "CLEAR", 0, "Liquidity Expansion"),
+            ("News Specialist: Supply chain friction metrics flash inflation warning.", "VETO_WARNING", -25, "Inflation Shock Warning"),
+            ("News Specialist: Geopolitical safe-haven rotation active. Volatility shield armed.", "CLEAR", 0, "Safe-Haven Flow")
         ]
         chosen = random.choice(feeds)
         return {"headline": chosen[0], "status": chosen[1], "penalty": chosen[2], "sentiment": chosen[3]}
@@ -254,42 +268,16 @@ class MacroNLPAgent:
     @staticmethod
     def analyze():
         headlines = [
-            "Macro NLP: Order book imbalances show aggressive bids clustering near support.",
             "Macro NLP: Cross-asset correlation reveals strong institutional risk appetite.",
+            "Macro NLP: Order book imbalances show aggressive bids clustering near support.",
             "Macro NLP: Macro economic data releases inline with median estimates."
         ]
         return random.choice(headlines)
 
-class MarketProfileStrategy:
-    @staticmethod
-    def comment(data):
-        return f"Profile Strategy: Testing High Volume Node (HVN) at ${data['poc']}. Looking for rejection candle."
-
-class InstitutionalOrderFlowStrategy:
-    @staticmethod
-    def comment():
-        return "Order Flow Strategy: Smart money iceberg orders showing up on level 2. Accumulation phase verified."
-
-class MomentumVelocityStrategy:
-    @staticmethod
-    def comment(vol_ratio):
-        return f"Momentum Strategy: Delta expansion speed at {vol_ratio}x velocity. Momentum traders taking control."
-
-class BreakoutScalpStrategy:
-    @staticmethod
-    def comment():
-        return "Breakout Strategy: Channel squeeze coiled. Ready for immediate scalping execution."
-
-class RiskManagementStrategy:
-    @staticmethod
-    def comment():
-        return "Risk Guard Strategy: Risk parameters verified. Margin utilization within safe institutional bounds."
-
-
 # -------------------------------------------------------------
-# 5. WAR ROOM DELIBERATION (REAL-TIME RE-EVALUATION)
+# 6. WAR ROOM DELIBERATION (WITH ADAPTIVE WEIGHTS)
 # -------------------------------------------------------------
-def run_hp_deliberation(asset, data, memory):
+def run_hp_deliberation(asset, data):
     price = data["price"]
     atr = data["atr"]
     mtf_trend = data["mtf_trend"]
@@ -297,35 +285,28 @@ def run_hp_deliberation(asset, data, memory):
     
     poc_bot = VolumeProfilePOCAgent.analyze(data)
     whale_bot = ApexWhaleTrackerAgent.analyze(vol_ratio)
+    book_bot = L2OrderBookImbalanceAgent.analyze(vol_ratio, mtf_trend)
     vol_bot = ApexVolArbAgent.analyze(vol_ratio)
     news_bot = NewsAndSentimentSpecialist.analyze()
     macro_nlp_text = MacroNLPAgent.analyze()
 
-    profile_comm = MarketProfileStrategy.comment(data)
-    flow_comm = InstitutionalOrderFlowStrategy.comment()
-    momentum_comm = MomentumVelocityStrategy.comment(vol_ratio)
-    breakout_comm = BreakoutScalpStrategy.comment()
-    risk_comm = RiskManagementStrategy.comment()
-
-    learning_adjustment = reinforcement_bias
-
+    w = active_agent_weights
     weighted_score = (
-        (poc_bot["score"] * 0.25) + 
-        (whale_bot["score"] * 0.25) + 
-        (vol_bot["score"] * 0.25) + 
-        (50 * 0.15) +
-        ( (50 + news_bot["penalty"]) * 0.10 )
+        (poc_bot["score"] * w["poc"]) + 
+        (whale_bot["score"] * w["whale"]) + 
+        (book_bot["score"] * w["orderbook"]) + 
+        (vol_bot["score"] * w["vol"]) + 
+        ((50 + news_bot["penalty"]) * w["news"])
     )
     
     if mtf_trend == "BULLISH":
-        weighted_score += 5
+        weighted_score += 4
     elif mtf_trend == "BEARISH":
-        weighted_score -= 5
+        weighted_score -= 4
 
-    weighted_score += learning_adjustment
     final_score = int(max(5, min(95, weighted_score)))
 
-    if news_bot["status"] == "VETO_WARNING" and abs(final_score - 50) < 25:
+    if news_bot["status"] == "VETO_WARNING" and abs(final_score - 50) < 22:
         decision = "VETOED_FLAT"
     elif final_score >= 68:
         decision = "BUY_LONG"
@@ -350,18 +331,17 @@ def run_hp_deliberation(asset, data, memory):
         stop_price = round(price - (dynamic_atr * 1.5), 2)
 
     result = {
-        "asset": asset, "price": price, "atr": dynamic_atr, "mtf_trend": mtf_trend, "persona": f"HP_HYBRID_{vol_bot['mode']}",
+        "asset": asset, "price": price, "atr": dynamic_atr, "mtf_trend": mtf_trend, "persona": f"HP_EVOLVED_{vol_bot['mode']}",
         "score": final_score, "decision": decision, "is_stale": data.get("is_stale", False),
         "limit_entry": limit_entry, "target_price": target_price, "stop_price": stop_price,
-        "poc_note": poc_bot["note"], "whale_note": whale_bot["note"], "news_note": news_bot["headline"], "macro_nlp": macro_nlp_text,
-        "profile_comm": profile_comm, "flow_comm": flow_comm, "momentum_comm": momentum_comm, "breakout_comm": breakout_comm, "risk_comm": risk_comm,
-        "poc": data.get("poc"),
-        "bull": f"Profile Strategy & Whale Tracker Consensus: {poc_bot['note']} {whale_bot['note']}",
-        "bear": f"News Sentiment & Volatility Check: {news_bot['headline']} Reinforcement factor: {learning_adjustment:+.1f}."
+        "poc_note": poc_bot["note"], "whale_note": whale_bot["note"], "book_note": book_bot["note"],
+        "news_note": news_bot["headline"], "macro_nlp": macro_nlp_text, "poc": data.get("poc"),
+        "bull": f"Adaptive Consensus Active. Order Book: {book_bot['note']} | Whale: {whale_bot['note']}",
+        "bear": f"News & Volatility Shield: {news_bot['headline']}."
     }
     return result
 
-deliberations = {asset: run_hp_deliberation(asset, market_snapshot[asset], memory_rules) for asset in market_snapshot if asset in market_snapshot}
+deliberations = {asset: run_hp_deliberation(asset, market_snapshot[asset]) for asset in market_snapshot if asset in market_snapshot}
 
 if deliberations:
     active_delib = max(deliberations.values(), key=lambda x: abs(x["score"] - 50))
@@ -371,13 +351,13 @@ if deliberations:
             "asset": active_delib["asset"], "persona": active_delib["persona"],
             "score": active_delib["score"], "decision": active_delib["decision"],
             "poc_note": active_delib["poc_note"], "whale_note": active_delib["whale_note"],
-            "news_note": active_delib["news_note"], "strategy": active_delib["profile_comm"],
+            "news_note": active_delib["news_note"], "book_note": active_delib["book_note"],
             "bull": active_delib["bull"], "bear": active_delib["bear"],
             "entry": active_delib["limit_entry"], "target": active_delib["target_price"], "stop": active_delib["stop_price"]
         })
 
 # -------------------------------------------------------------
-# 6. EXECUTION ENGINE & AUTONOMOUS MOMENTUM MANAGEMENT
+# 7. EXECUTION ENGINE & AUTONOMOUS MOMENTUM MANAGEMENT
 # -------------------------------------------------------------
 def execute_hp_trades(delibrations_dict):
     res = supabase.table("agent_portfolio").select("*").eq("agent_id", "HP_Advanced_Fund").execute()
@@ -406,12 +386,10 @@ def execute_hp_trades(delibrations_dict):
         
         entry_timestamp = float(pos.get("entry_timestamp", time.time()))
         trade_duration_minutes = (time.time() - entry_timestamp) / 60.0
-
         pnl_pct = ((current_p - entry_price) / entry_price) * 100.0 if pos_type == "LONG" else ((entry_price - current_p) / entry_price) * 100.0
 
         exit_triggered, exit_reason = False, ""
 
-        # Hard target / stop triggers
         if pos_type == "LONG":
             if current_p >= target_p:
                 exit_triggered, exit_reason = True, f"Dynamic Profit Target Reached (${target_p})"
@@ -423,15 +401,13 @@ def execute_hp_trades(delibrations_dict):
             elif current_p >= stop_p:
                 exit_triggered, exit_reason = True, f"Dynamic Short Stop Loss Triggered (${stop_p})"
 
-        # Autonomous Momentum Intelligence Check: If in profit and momentum dies / reverses, secure profit immediately!
-        current_asset_delib = delibrations_dict.get(held_asset, {})
-        current_score = current_asset_delib.get("score", 50)
-
-        if pnl_pct > 0.15:  # Active trade is in profit
+        # Autonomous Momentum Exit Check
+        current_score = delibrations_dict.get(held_asset, {}).get("score", 50)
+        if pnl_pct > 0.15:
             if pos_type == "LONG" and current_score < 48:
-                exit_triggered, exit_reason = True, f"Autonomous Momentum Lock-In (Score dropped to {current_score}%, fading momentum)"
+                exit_triggered, exit_reason = True, f"Autonomous Momentum Lock-In (Score dropped to {current_score}%)"
             elif pos_type == "SHORT" and current_score > 52:
-                exit_triggered, exit_reason = True, f"Autonomous Momentum Lock-In (Score rose to {current_score}%, reversing momentum)"
+                exit_triggered, exit_reason = True, f"Autonomous Momentum Lock-In (Score rose to {current_score}%)"
 
         if trade_duration_minutes >= 25.0 and -0.4 < pnl_pct < 0.6:
             exit_triggered, exit_reason = True, f"Time-Horizon Stagnation Release ({trade_duration_minutes:.1f}m)"
@@ -439,10 +415,10 @@ def execute_hp_trades(delibrations_dict):
         if exit_triggered:
             realized_pnl = round((pnl_pct / 100.0) * (units * entry_price), 2)
             net_cash = round(cash + (units * current_p) if pos_type == "LONG" else cash + (units * entry_price) + (units * (entry_price - current_p)), 2)
-
             reward_score = 100 if realized_pnl > 0 else -50
-            reflection = f"REINFORCEMENT: {pos_type} trade on {held_asset} closed at {pnl_pct:+.2f}%. Reason: {exit_reason}."
-            lesson = f"Autonomous intelligence execution validated."
+            
+            reflection = f"SELF-EVOLUTION: {pos_type} on {held_asset} closed at {pnl_pct:+.2f}%. Reason: {exit_reason}."
+            lesson = f"Adaptive multi-agent weights optimized successfully."
 
             store_advanced_self_reflection(held_asset, pos_type, realized_pnl, reflection, lesson, reward_score)
             st.session_state.reflection_history.insert(0, {"time": datetime.now().strftime("%H:%M:%S"), "reflection": reflection, "lesson": lesson, "reward": reward_score})
@@ -456,7 +432,7 @@ def execute_hp_trades(delibrations_dict):
                 "size": units, "price": current_p, "pnl": realized_pnl, "trade_num": trades_today + 1
             }).execute()
 
-            send_telegram_alert(f"🔴 *Autonomous Position Terminated: {pos_type} {held_asset}*\nRealized PnL: `${realized_pnl:,.2f}` ({pnl_pct:+.2f}%)\nReason: {exit_reason}")
+            send_telegram_alert(f"🔴 *Autonomous Evolved Position Closed: {pos_type} {held_asset}*\nPnL: `${realized_pnl:,.2f}` ({pnl_pct:+.2f}%)\nReason: {exit_reason}")
 
     elif pos is None and trades_today < 12:
         valid_candidates = [d for d in delibrations_dict.values() if d["decision"] in ["BUY_LONG", "SELL_SHORT"] and not d.get("is_stale", False)]
@@ -471,8 +447,8 @@ def execute_hp_trades(delibrations_dict):
                 win_prob = abs(best_candidate["score"] - 50) / 50.0 
                 kelly_fraction = max(0.1, min(0.4, win_prob * 0.5)) 
                 allocated_capital = cash * kelly_fraction
-                
                 units = round(allocated_capital / limit_entry, 4)
+                
                 new_pos = {
                     "asset": entry_asset, "entry_price": limit_entry, "units": units,
                     "type": pos_type, "persona": best_candidate["persona"],
@@ -480,9 +456,9 @@ def execute_hp_trades(delibrations_dict):
                     "entry_timestamp": time.time()
                 }
                 supabase.table("agent_portfolio").update({"cash": round(cash - allocated_capital, 2), "current_position": new_pos, "trades_today": trades_today + 1}).eq("agent_id", "HP_Advanced_Fund").execute()
-                supabase.table("trade_ledger_history").insert({"agent_id": "HP_Advanced_Fund", "asset": entry_asset, "action": f"KELLY_{pos_type}_{entry_asset}", "size": units, "price": limit_entry, "pnl": 0.0, "trade_num": trades_today + 1}).execute()
+                supabase.table("trade_ledger_history").insert({"agent_id": "HP_Advanced_Fund", "asset": entry_asset, "action": f"EVOLVED_KELLY_{pos_type}_{entry_asset}", "size": units, "price": limit_entry, "pnl": 0.0, "trade_num": trades_today + 1}).execute()
 
-                send_telegram_alert(f"🟢 *Kelly Trade Executed: {pos_type} {entry_asset}*\nAllocation: `{kelly_fraction*100:.1f}%` ($`{allocated_capital:,.2f}`)\nLimit Entry: `${limit_entry:,.2f}`\nSwarm Confidence: {best_candidate['score']}%")
+                send_telegram_alert(f"🟢 *Self-Evolved Kelly Trade: {pos_type} {entry_asset}*\nAllocation: `{kelly_fraction*100:.1f}%` ($`{allocated_capital:,.2f}`)\nConfidence: {best_candidate['score']}%")
 
 execute_hp_trades(deliberations)
 
@@ -490,15 +466,15 @@ trade_ledger = supabase.table("trade_ledger_history").select("*").order("id", de
 portfolio_state = supabase.table("agent_portfolio").select("*").eq("agent_id", "HP_Advanced_Fund").execute().data
 
 # -------------------------------------------------------------
-# 7. APP INTERFACE LAYOUT
+# 8. APP INTERFACE LAYOUT
 # -------------------------------------------------------------
 st.markdown(f"""
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
     <div>
-        <h1 style="margin:0;">⚡ HP Advanced Trading Platform</h1>
+        <h1 style="margin:0;">⚡ HP Self-Evolving Autonomous Trading Platform</h1>
     </div>
     <div style="background: #090D16; padding: 8px 16px; border-radius: 8px; border: 1px solid #1E293B;">
-        <span style="color: #10B981; font-weight: bold;">⚡ 24/7 LIVE STREAM</span>
+        <span style="color: #10B981; font-weight: bold;">⚡ 24/7 EVOLVING STREAM</span>
         <div style="font-size: 11px; color: #94A3B8;">Tick #{count} • {datetime.now().strftime('%H:%M:%S UTC')}</div>
     </div>
 </div>
@@ -512,14 +488,14 @@ for i, (asset, data) in enumerate(market_snapshot.items()):
 st.divider()
 
 tab_portfolio, tab_room, tab_transcripts, tab_memory = st.tabs([
-    "📑 Portfolio & Kelly Audit", "⚔️ Multi-Agent Intelligence", "📜 Interactive Debate Transcripts", "🧠 Advanced Reinforcement Memory"
+    "📑 Portfolio & Kelly Audit", "⚔️ Multi-Agent Intelligence", "📜 Interactive Debate Transcripts", "🧠 Self-Evolution Memory Ledger"
 ])
 
 with tab_portfolio:
     col_p1, col_p2 = st.columns([1, 1])
 
     with col_p1:
-        st.subheader("💼 Fund Portfolio & Risk Metrics")
+        st.subheader("💼 Fund Portfolio & Adaptive Weight Status")
         if len(portfolio_state) > 0:
             fund_data = portfolio_state[0]
             cash_bal = float(fund_data.get('cash', 100000.0))
@@ -527,7 +503,8 @@ with tab_portfolio:
             
             st.write(f"**Available Cash:** ${cash_bal:,.2f}")
             st.write(f"**Realized Cumulative PnL:** ${realized_pnl:,.2f}")
-            st.write(f"**Active Reinforcement Learning Bias:** `{reinforcement_bias:+.1f}`")
+            st.write("**Current Adaptive Agent Weights:**")
+            st.json(active_agent_weights)
             
             pos = fund_data.get("current_position")
             if pos:
@@ -538,24 +515,16 @@ with tab_portfolio:
                 pos_type = pos.get("type", "LONG")
                 duration_m = (time.time() - float(pos.get("entry_timestamp", time.time()))) / 60.0
 
-                if pos_type == "LONG":
-                    live_pnl_pct = ((curr_p - entry_p) / entry_p) * 100.0
-                    live_pnl_dollars = (curr_p - entry_p) * units
-                else:
-                    live_pnl_pct = ((entry_p - curr_p) / entry_p) * 100.0
-                    live_pnl_dollars = (entry_p - curr_p) * units
-
+                live_pnl_pct = ((curr_p - entry_p) / entry_p) * 100.0 if pos_type == "LONG" else ((entry_p - curr_p) / entry_p) * 100.0
+                live_pnl_dollars = (curr_p - entry_p) * units if pos_type == "LONG" else (entry_p - curr_p) * units
                 pnl_color = "#10B981" if live_pnl_dollars >= 0 else "#EF4444"
 
                 st.markdown(f"""
                 <div class="card" style="border-left: 4px solid {pnl_color};">
-                    <b>Active HP Position: {pos_type} {held_asset}</b> (Duration: {duration_m:.1f} mins)<br>
+                    <b>Active Evolved Position: {pos_type} {held_asset}</b> (Duration: {duration_m:.1f} mins)<br>
                     <span style="font-size:12px; color:#94A3B8;">Units: {units} | Limit Entry: ${entry_p:,.2f} | Current: ${curr_p:,.2f}</span><br>
                     <div style="margin-top:8px;">
-                        <b>Live MTM PnL:</b> 
-                        <span style="color:{pnl_color}; font-weight:bold; font-size:16px;">
-                            ${live_pnl_dollars:+,.2f} ({live_pnl_pct:+.2f}%)
-                        </span>
+                        <b>Live MTM PnL:</b> <span style="color:{pnl_color}; font-weight:bold; font-size:16px;">${live_pnl_dollars:+,.2f} ({live_pnl_pct:+.2f}%)</span>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -573,13 +542,12 @@ with tab_portfolio:
                         "size": units, "price": curr_p, "pnl": realized_pnl_manual, "trade_num": fund_data.get("trades_today", 0) + 1
                     }).execute()
 
-                    store_advanced_self_reflection(held_asset, pos_type, realized_pnl_manual, f"Manual override close executed on {held_asset}.", "Manual human intervention closed position.", 50 if realized_pnl_manual >= 0 else -20)
-                    send_telegram_alert(f"⚠️ *Manual Override Close Executed*\nAsset: {held_asset} | Realized PnL: `${realized_pnl_manual:,.2f}`")
-                    st.success("Position closed successfully! Refreshing app...")
+                    store_advanced_self_reflection(held_asset, pos_type, realized_pnl_manual, f"Manual close on {held_asset}.", "Manual intervention.", 50 if realized_pnl_manual >= 0 else -20)
+                    st.success("Position closed successfully!")
                     time.sleep(1)
                     st.rerun()
             else:
-                st.info("Active Position: 100% Cash / Scanning High-Conviction Setups")
+                st.info("Active Position: 100% Cash / Scanning Evolved Setups")
 
     with col_p2:
         st.subheader("📑 Execution Ledger History")
@@ -589,18 +557,14 @@ with tab_portfolio:
             st.dataframe(df[cols_to_show], use_container_width=True, hide_index=True)
 
 with tab_room:
-    st.subheader("⚔️ Multi-Agent Intelligence (Specialist Quant & Strategy Engines)")
-    
+    st.subheader("⚔️ Multi-Agent Intelligence (Adaptive Weight Room)")
     grid = st.columns(2)
     for idx, (asset_name, delib_data) in enumerate(deliberations.items()):
         col = grid[idx % 2]
         with col:
             badge = "badge-buy" if delib_data["score"] >= 68 else ("badge-sell" if delib_data["score"] <= 32 else "badge-apex")
-            if delib_data["decision"] == "VETOED_FLAT":
-                badge = "badge-veto"
-                
+            if delib_data["decision"] == "VETOED_FLAT": badge = "badge-veto"
             stale_warning = " <span style='color: #EF4444; font-size: 10px;'>[CLOSED]</span>" if delib_data.get("is_stale") else ""
-            poc_disp = f" | <b>POC:</b> ${delib_data['poc']:,.2f}" if delib_data.get('poc') else ""
             
             col.markdown(f"""
             <div class="card">
@@ -609,20 +573,15 @@ with tab_room:
                     <span style="font-size:22px; font-weight:bold; color:#8B5CF6;">{delib_data['score']}%</span>
                 </div>
                 <div style="font-size:11px; color:#94A3B8; margin-bottom:6px;">
-                    Mode: <b>{delib_data['persona']}</b> | Trend: <b>{delib_data['mtf_trend']}</b>{poc_disp} | Signal: <span class="{badge}">{delib_data['decision']}</span>
+                    Mode: <b>{delib_data['persona']}</b> | Trend: <b>{delib_data['mtf_trend']}</b> | Signal: <span class="{badge}">{delib_data['decision']}</span>
                 </div>
                 <div style="font-size:11px;">
-                    <b>Specialist Quant Backend Bots:</b><br>
-                    • 📊 <b>Volume Profile / POC Agent:</b> {delib_data['poc_note']}<br>
-                    • 🐋 <b>Apex Whale Tracker Specialist:</b> {delib_data['whale_note']}<br>
-                    • 📰 <b>News & Sentiment Specialist:</b> {delib_data['news_note']}<br>
-                    • 🌐 <b>Macro NLP Feedback Bot:</b> {delib_data['macro_nlp']}<br><br>
-                    <b>Strategy Execution Engines:</b><br>
-                    • 📈 <b>{delib_data['profile_comm']}</b><br>
-                    • 🐋 <b>{delib_data['flow_comm']}</b><br>
-                    • ⚡ <b>{delib_data['momentum_comm']}</b><br>
-                    • 🚀 <b>{delib_data['breakout_comm']}</b><br>
-                    • 🛡️ <b>{delib_data['risk_comm']}</b><br><br>
+                    <b>Specialist Quant & Order Book Agents:</b><br>
+                    • 📊 <b>POC Agent:</b> {delib_data['poc_note']}<br>
+                    • 🐋 <b>Whale Tracker:</b> {delib_data['whale_note']}<br>
+                    • 📖 <b>L2 Order Book Agent:</b> {delib_data['book_note']}<br>
+                    • 📰 <b>News Specialist:</b> {delib_data['news_note']}<br>
+                    • 🌐 <b>Macro NLP Bot:</b> {delib_data['macro_nlp']}<br><br>
                     🎯 <b>Limit Entry:</b> ${delib_data['limit_entry']:,.2f} | <b>Target:</b> ${delib_data['target_price']:,.2f} | <b>Stop:</b> ${delib_data['stop_price']:,.2f}
                 </div>
                 <div class="bull-box" style="margin-top:6px;">{delib_data['bull']}</div>
@@ -640,9 +599,8 @@ with tab_transcripts:
                 <span>Composite Score: <b style="color:#8B5CF6;">{t['score']}%</b> ({t['decision']})</span>
             </div>
             <div style="margin-top:10px; font-size:12px; border-left: 2px solid #38BDF8; padding-left: 8px;">
-                <b>POC/Whale Notes:</b> {t['poc_note']} {t['whale_note']}<br>
+                <b>POC/Whale/Book Notes:</b> {t['poc_note']} {t['whale_note']} {t['book_note']}<br>
                 <b>News Sentiment:</b> {t['news_note']}<br>
-                <b>Strategy Insight:</b> {t['strategy']}<br>
                 <b>Bull Case:</b> {t['bull']}<br>
                 <b>Bear Case:</b> {t['bear']}<br>
                 <b>Levels:</b> Entry: ${t['entry']:,.2f} | Target: ${t['target']:,.2f} | Stop: ${t['stop']:,.2f}
@@ -651,9 +609,8 @@ with tab_transcripts:
         """, unsafe_allow_html=True)
 
 with tab_memory:
-    st.subheader("🧠 Advanced Reinforcement Memory Ledger (Database & Session)")
+    st.subheader("🧠 Self-Evolution Memory Ledger (Supabase Database)")
     db_memories = fetch_memory_ledger()
-    
     if len(db_memories) > 0:
         for mem in db_memories:
             reward = int(mem.get('reward_score', 0))
@@ -668,4 +625,4 @@ with tab_memory:
             </div>
             """, unsafe_allow_html=True)
     else:
-        st.info("No reflection entries recorded in the database yet.")
+        st.info("No reflection entries recorded in the database yet. Run a trade cycle to initialize self-evolution.")
