@@ -94,7 +94,6 @@ def fetch_institutional_market_data():
                 if pd.isna(atr): atr = raw_p * 0.005
                 vol_surge = bool(hist['Volume'].iloc[-1] > hist['Volume'].mean() * 1.5) if 'Volume' in hist else False
                 
-                # If it's a commodity and market is closed, retain last valid price but mark inactive for new trades
                 if meta["type"] == "commodity" and is_weekend:
                     is_active = False
                     reason = "Market Closed (Weekend - Holding Price)"
@@ -257,8 +256,8 @@ def execute_professional_engine(deliberations_dict):
         if current_p <= 0:
             current_p = entry_price # Fallback to entry price over weekends so PnL doesn't show -100%
 
-        target_p = float(pos.get("target_price", entry_p * 1.02))
-        stop_p = float(pos.get("stop_price", entry_p * 0.98))
+        target_p = float(pos.get("target_price", entry_price * 1.02))
+        stop_p = float(pos.get("stop_price", entry_price * 0.98))
         
         pnl_pct = ((current_p - entry_price) / entry_price) * 100.0 if pos_type == "LONG" else ((entry_price - current_p) / entry_price) * 100.0
 
