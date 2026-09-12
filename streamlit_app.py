@@ -85,13 +85,6 @@ def fetch_institutional_market_data():
     is_weekend = current_utc.weekday() >= 5
 
     for name, meta in assets.items():
-        if meta["type"] == "commodity" and is_weekend:
-            market_data[name] = {
-                "active": False, "reason": "Market Closed (Weekend)",
-                "price": 0.0, "atr": 0.0, "mtf_trend": "CLOSED", "poc": 0.0, "volume_surge": False
-            }
-            continue
-
         try:
             t = yf.Ticker(meta["symbol"])
             hist = t.history(period="5d", interval="15m")
@@ -100,8 +93,14 @@ def fetch_institutional_market_data():
                 atr = float((hist['High'] - hist['Low']).mean())
                 if pd.isna(atr): atr = raw_p * 0.005
                 vol_surge = bool(hist['Volume'].iloc[-1] > hist['Volume'].mean() * 1.5) if 'Volume' in hist else False
-                is_active = True
-                reason = "Live & Verified"
+                
+                # If it's a commodity and market is closed, retain last valid price but mark inactive for new trades
+                if meta["type"] == "commodity" and is_weekend:
+                    is_active = False
+                    reason = "Market Closed (Weekend - Holding Price)"
+                else:
+                    is_active = True
+                    reason = "Live & Verified"
             else:
                 raw_p, atr, is_active, reason, vol_surge = 0.0, 0.0, False, "No Data Feed", False
         except Exception as e:
@@ -164,11 +163,11 @@ active_weights = get_adaptive_agent_weights()
 # 4. FULL MULTI-AGENT WAR ROOM DELIBERATION
 # -------------------------------------------------------------
 def run_professional_war_room(asset, data):
-    if not data["active"]:
+    if data["price"] <= 0:
         return {
             "asset": asset, "price": 0.0, "score": 50, "decision": "MARKET_CLOSED",
             "mtf_trend": "INACTIVE", "target_price": 0.0, "stop_price": 0.0,
-            "dialogs": [f"<b>SystemGatekeeper:</b> Exchange market closed ({data['reason']}). Execution suspended."]
+            "dialogs": [f"<b>SystemGatekeeper:</b> Price feed unavailable ({data['reason']})."]
         }
 
     price = data["price"]
@@ -252,16 +251,19 @@ def execute_professional_engine(deliberations_dict):
         entry_price = float(pos.get("entry_price", 0.0))
         pos_type = pos.get("type", "LONG")
         units = float(pos.get("units", 0.0))
-        current_data = market_snapshot.get(held_asset, {"price": entry_price, "active": False})
+        current_data = market_snapshot.get(held_asset, {"price": 0.0})
         
-        if current_data["active"] and entry_price > 0:
-            current_p = current_data["price"]
-            target_p = float(pos.get("target_price", entry_price * 1.02))
-            stop_p = float(pos.get("stop_price", entry_price * 0.98))
-            
-            pnl_pct = ((current_p - entry_price) / entry_price) * 100.0 if pos_type == "LONG" else ((entry_price - current_p) / entry_price) * 100.0
+        current_p = current_data["price"]
+        if current_p <= 0:
+            current_p = entry_price # Fallback to entry price over weekends so PnL doesn't show -100%
 
-            exit_triggered, exit_reason = False, ""
+        target_p = float(pos.get("target_price", entry_p * 1.02))
+        stop_p = float(pos.get("stop_price", entry_p * 0.98))
+        
+        pnl_pct = ((current_p - entry_price) / entry_price) * 100.0 if pos_type == "LONG" else ((entry_price - current_p) / entry_price) * 100.0
+
+        exit_triggered, exit_reason = False, ""
+        if current_data["price"] > 0: # Only check stops/targets if feed is live
             if pos_type == "LONG":
                 if current_p >= target_p: exit_triggered, exit_reason = True, "Take Profit Target Reached (2R)"
                 elif current_p <= stop_p: exit_triggered, exit_reason = True, "Stop Loss Enforced"
@@ -269,29 +271,29 @@ def execute_professional_engine(deliberations_dict):
                 if current_p <= target_p: exit_triggered, exit_reason = True, "Short Take Profit Target Reached (2R)"
                 elif current_p >= stop_p: exit_triggered, exit_reason = True, "Short Stop Loss Enforced"
 
-            if exit_triggered:
-                realized_pnl = round((pnl_pct / 100.0) * (units * entry_price), 2)
-                net_cash = round(cash + (units * current_p) if pos_type == "LONG" else cash + (units * entry_price) + realized_pnl, 2)
-                reward = 150 if realized_pnl > 0 else -100
-                
-                reflection = f"Closed {pos_type} on {held_asset} at {pnl_pct:+.2f}%. Reason: {exit_reason}."
-                lesson = "Risk-to-reward parameters executed cleanly." if realized_pnl > 0 else "Stop-loss protected capital from adverse movement."
+        if exit_triggered:
+            realized_pnl = round((pnl_pct / 100.0) * (units * entry_price), 2)
+            net_cash = round(cash + (units * current_p) if pos_type == "LONG" else cash + (units * entry_price) + realized_pnl, 2)
+            reward = 150 if realized_pnl > 0 else -100
+            
+            reflection = f"Closed {pos_type} on {held_asset} at {pnl_pct:+.2f}%. Reason: {exit_reason}."
+            lesson = "Risk-to-reward parameters executed cleanly." if realized_pnl > 0 else "Stop-loss protected capital from adverse movement."
 
-                log_self_reflection(held_asset, pos_type, realized_pnl, reflection, lesson, reward)
+            log_self_reflection(held_asset, pos_type, realized_pnl, reflection, lesson, reward)
 
-                supabase.table("agent_portfolio").update({
-                    "cash": net_cash, "current_position": None, "trades_today": trades_today + 1, "total_pnl": total_pnl + realized_pnl
-                }).eq("agent_id", agent_id).execute()
+            supabase.table("agent_portfolio").update({
+                "cash": net_cash, "current_position": None, "trades_today": trades_today + 1, "total_pnl": total_pnl + realized_pnl
+            }).eq("agent_id", agent_id).execute()
 
-                supabase.table("trade_ledger_history").insert({
-                    "agent_id": agent_id, "asset": held_asset, "action": f"CLOSE_{pos_type}",
-                    "size": units, "price": current_p, "pnl": realized_pnl, "trade_num": trades_today + 1
-                }).execute()
+            supabase.table("trade_ledger_history").insert({
+                "agent_id": agent_id, "asset": held_asset, "action": f"CLOSE_{pos_type}",
+                "size": units, "price": current_p, "pnl": realized_pnl, "trade_num": trades_today + 1
+            }).execute()
 
-                send_telegram_alert(f"🔴 *Position Closed & Memory Logged*\nAsset: {pos_type} {held_asset} | PnL: `${realized_pnl:,.2f}`")
+            send_telegram_alert(f"🔴 *Position Closed & Memory Logged*\nAsset: {pos_type} {held_asset} | PnL: `${realized_pnl:,.2f}`")
 
     elif pos is None:
-        valid = [d for d in deliberations_dict.values() if d["decision"] in ["BUY_LONG", "SELL_SHORT"] and market_snapshot[d["asset"]]["active"]]
+        valid = [d for d in deliberations_dict.values() if d["decision"] in ["BUY_LONG", "SELL_SHORT"] and d["price"] > 0]
         if valid:
             best = max(valid, key=lambda x: abs(x["score"] - 50))
             asset = best["asset"]
@@ -329,14 +331,14 @@ st.markdown(f"""
     <div><h1 style="margin:0;">⚡ HP Institutional Autonomous Engine</h1></div>
     <div style="background: #090D16; padding: 8px 16px; border-radius: 8px; border: 1px solid #1E293B;">
         <span style="color: #10B981; font-weight: bold;">🏛️ PRODUCTION GRADE ACTIVE</span>
-        <div style="font-size: 11px; color: #94A3B8;">Tick #{count} • Full Agent Suite & Fully Safe Lookups</div>
+        <div style="font-size: 11px; color: #94A3B8;">Tick #{count} • Weekend Commodity Safe Guards Active</div>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
 cols = st.columns(4)
 for i, (asset, data) in enumerate(market_snapshot.items()):
-    status_label = f"${data['price']:,.2f}" if data["active"] else f"🔒 {data['reason']}"
+    status_label = f"${data['price']:,.2f}" if data["price"] > 0 else f"🔒 {data['reason']}"
     cols[i].metric(label=asset.upper(), value=status_label)
 
 st.divider()
@@ -359,17 +361,22 @@ with tab_portfolio:
             if pos and isinstance(pos, dict):
                 held_asset = pos.get("asset", "Unknown")
                 entry_p = float(pos.get("entry_price", 0.0))
-                curr_p = market_snapshot.get(held_asset, {}).get("price", entry_p)
+                
+                raw_curr_p = market_snapshot.get(held_asset, {}).get("price", 0.0)
+                curr_p = raw_curr_p if raw_curr_p > 0 else entry_p
+                
                 pnl_pct = ((curr_p - entry_p) / entry_p) * 100.0 if pos.get('type', 'LONG') == "LONG" and entry_p > 0 else 0.0
                 pnl_color = "#10B981" if pnl_pct >= 0 else "#EF4444"
 
                 target_val = float(pos.get('target_price', entry_p * 1.02 if entry_p > 0 else 0))
                 stop_val = float(pos.get('stop_price', entry_p * 0.98 if entry_p > 0 else 0))
 
+                market_status_note = "" if raw_curr_p > 0 else "<br><span style='color: #F59E0B; font-size: 11px;'>⚠️ Weekend Close: Holding last session price for PnL</span>"
+
                 st.markdown(f"""
                 <div class="card" style="border-color: #38BDF8;">
                     <b>Active Managed Position: {pos.get('type', 'LONG')} {held_asset}</b><br>
-                    Entry Price: `${entry_p:,.2f}` | Current Price: `${curr_p:,.2f}`<br>
+                    Entry Price: `${entry_p:,.2f}` | Current Price: `${curr_p:,.2f}`{market_status_note}<br>
                     <b>Live Unrealized PnL: <span style="color: {pnl_color};">{pnl_pct:+,.2f}%</span></b><br>
                     Target: `${target_val:,.2f}` | Stop: `${stop_val:,.2f}`
                 </div>
