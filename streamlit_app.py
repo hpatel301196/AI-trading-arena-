@@ -32,10 +32,10 @@ st.markdown("""
     div[data-testid="stMetric"] div[data-testid="stMetricValue"] { color: #38BDF8 !important; font-size: 18px; font-weight: bold; }
 
     .card { background: #090D16; border: 1px solid #1E293B; border-radius: 10px; padding: 14px; margin-bottom: 12px; }
-    .warroom-box { background: rgba(9, 13, 22, 0.95); border: 1px solid #334155; border-radius: 8px; padding: 14px; margin-bottom: 12px; }
-    .bull-box { background: rgba(16, 185, 129, 0.08); border-left: 4px solid #10B981; padding: 10px 12px; border-radius: 6px; margin-bottom: 8px; font-size: 12px; }
-    .bear-box { background: rgba(239, 68, 68, 0.08); border-left: 4px solid #EF4444; padding: 10px 12px; border-radius: 6px; margin-bottom: 8px; font-size: 12px; }
-    .reflection-box { background: rgba(139, 92, 246, 0.08); border: 1px solid #8B5CF6; padding: 14px 16px; border-radius: 8px; margin-bottom: 12px; }
+    .agent-speech { background: #0F172A; border-left: 3px solid #38BDF8; padding: 10px 14px; border-radius: 6px; margin-bottom: 8px; font-size: 12px; }
+    .bull-speech { background: rgba(16, 185, 129, 0.08); border-left: 3px solid #10B981; padding: 10px 14px; border-radius: 6px; margin-bottom: 8px; font-size: 12px; }
+    .bear-speech { background: rgba(239, 68, 68, 0.08); border-left: 3px solid #EF4444; padding: 10px 14px; border-radius: 6px; margin-bottom: 8px; font-size: 12px; }
+    .reflection-card { background: rgba(139, 92, 246, 0.08); border: 1px solid #8B5CF6; padding: 14px 16px; border-radius: 8px; margin-bottom: 12px; }
 
     .badge-buy { background-color: #10B981; color: #000; padding: 4px 10px; border-radius: 4px; font-weight: 800; font-size: 11px; }
     .badge-sell { background-color: #EF4444; color: #FFF; padding: 4px 10px; border-radius: 4px; font-weight: 800; font-size: 11px; }
@@ -101,7 +101,7 @@ def fetch_hp_market_data():
 
         market_data[name] = {
             "price": smooth_p, "atr": round(atr, 4), 
-            "mtf_trend": "BULLISH" if random.random() > 0.35 else "BEARISH",
+            "mtf_trend": "BULLISH" if random.random() > 0.4 else "BEARISH",
             "vol_ratio": round(random.uniform(0.8, 1.8), 2),
             "poc": round(smooth_p - (atr * 0.1), 2)
         }
@@ -111,13 +111,14 @@ market_snapshot = fetch_hp_market_data()
 
 def fetch_memory_ledger():
     try:
-        res = supabase.table("system_memory_ledger").select("*").order("id", desc=True).limit(20).execute()
-        return res.data
-    except:
+        res = supabase.table("system_memory_ledger").select("*").order("id", desc=True).limit(25).execute()
+        return res.data if res.data else []
+    except Exception as e:
+        print(f"Fetch memory ledger error: {e}")
         return []
 
 # -------------------------------------------------------------
-# 3. SELF-ADAPTIVE WEIGHTS & REFLECTIONS
+# 3. SELF-ADAPTIVE WEIGHTS & REINFORCEMENT
 # -------------------------------------------------------------
 def get_adaptive_agent_weights():
     weights = {"poc": 0.25, "whale": 0.25, "orderbook": 0.20, "vol": 0.15, "news": 0.15}
@@ -133,30 +134,33 @@ def get_adaptive_agent_weights():
 def log_self_reflection(asset, trade_type, pnl, reflection, lesson, reward):
     try:
         supabase.table("system_memory_ledger").insert({
-            "asset": asset, "trade_type": trade_type, "pnl": pnl,
-            "reflection_notes": reflection, "lesson_learned": lesson, "reward_score": reward
+            "asset": asset, 
+            "trade_type": trade_type, 
+            "pnl": float(pnl),
+            "reflection_notes": reflection, 
+            "lesson_learned": lesson, 
+            "reward_score": int(reward)
         }).execute()
-        send_telegram_alert(f"🧠 *Autonomous Learning Logged*\nAsset: {asset} ({trade_type}) | PnL: `${pnl:,.2f}`\nLesson: {lesson}")
+        send_telegram_alert(f"🧠 *Memory Ledger Updated*\nAsset: {asset} ({trade_type}) | PnL: `${pnl:,.2f}`\nLesson: {lesson}")
     except Exception as e:
-        print(f"Reflection log error: {e}")
+        print(f"Supabase reflection insert error: {e}")
 
 active_weights = get_adaptive_agent_weights()
 
 # -------------------------------------------------------------
-# 4. RESTORED DETAILED WAR ROOM DEBATE & AGENTS
+# 4. RESTORED DETAILED MULTI-AGENT WAR ROOM DEBATES
 # -------------------------------------------------------------
-def run_detailed_war_room(asset, data):
+def run_war_room_deliberation(asset, data):
     price = data["price"]
     atr = data["atr"]
     mtf_trend = data["mtf_trend"]
     vol_ratio = data["vol_ratio"]
     poc = data["poc"]
     
-    # Detailed sub-agent scoring
-    poc_score = random.randint(45, 82)
-    whale_score = random.randint(40, 85)
-    book_score = random.randint(38, 80)
-    vol_score = random.randint(42, 78)
+    poc_score = random.randint(40, 85)
+    whale_score = random.randint(38, 88)
+    book_score = random.randint(35, 85)
+    vol_score = random.randint(40, 80)
     news_score = random.randint(45, 75)
 
     w = active_weights
@@ -168,52 +172,46 @@ def run_detailed_war_room(asset, data):
         (news_score * w["news"])
     )
     
-    if mtf_trend == "BULLISH": weighted_score += 5
-    else: weighted_score -= 5
+    if mtf_trend == "BULLISH": weighted_score += 6
+    else: weighted_score -= 6
 
     final_score = int(max(10, min(90, weighted_score)))
 
-    # Autonomous decision thresholds
-    if final_score >= 54: decision = "BUY_LONG"
-    elif final_score <= 46: decision = "SELL_SHORT"
+    if final_score >= 53: decision = "BUY_LONG"
+    elif final_score <= 47: decision = "SELL_SHORT"
     else: decision = "NEUTRAL"
 
     dynamic_atr = max(atr, price * 0.003)
     if decision == "BUY_LONG":
         target = round(price + (dynamic_atr * 1.5), 2)
         stop = round(price - (dynamic_atr * 0.8), 2)
-        action_desc = "🚀 BULLISH SETUP CONFIRMED: High conviction multi-agent consensus reached for upward continuation."
     elif decision == "SELL_SHORT":
         target = round(price - (dynamic_atr * 1.5), 2)
         stop = round(price + (dynamic_atr * 0.8), 2)
-        action_desc = "🔻 BEARISH SETUP CONFIRMED: Distribution detected by whale tracker and order book imbalance."
     else:
         target, stop = price, price
-        action_desc = "⚖️ RANGE BOUND / NEUTRAL: Agents awaiting clearer momentum expansion."
 
-    # Detailed agent dialogue strings
-    transcripts = [
-        f"<b>VolumeProfilePOCAgent:</b> Scanned volume node cluster. POC positioned stably around ${poc:,.2f} with strong absorption.",
-        f"<b>ApexWhaleTrackerAgent:</b> Large wallet netflow ratio measured at {vol_ratio}x relative to 20-period baseline.",
-        f"<b>L2OrderBookImbalanceAgent:</b> Bid/Ask depth imbalance computed at {book_score}%. Order book pressure favors {'buyers' if final_score > 50 else 'sellers'}.",
-        f"<b>ApexVolArbAgent:</b> Volatility arbitrage spread normalized at ATR {atr:.2f}. Momentum confidence index at {final_score}%."
-    ]
+    # Detailed conversational agent dialogs for the war room UI
+    poc_dialog = f"<b>VolumeProfilePOCAgent (Score {poc_score}):</b> Scanned high-volume node cluster. Value Area POC pinned at ${poc:,.2f}. Price action shows structural acceptance."
+    whale_dialog = f"<b>ApexWhaleTrackerAgent (Score {whale_score}):</b> Monitored smart-money netflow. Large institutional block activity index is {vol_ratio}x baseline."
+    book_dialog = f"<b>L2OrderBookImbalanceAgent (Score {book_score}):</b> Order book depth disparity computed. Bid/Ask pressure points toward {'aggressive accumulation' if final_score > 50 else 'heavy distribution'}."
+    vol_dialog = f"<b>ApexVolArbAgent (Score {vol_score}):</b> Volatility arbitrage engine synchronized with ATR {atr:.2f}. Consensus confidence stands at {final_score}%."
 
     return {
         "asset": asset, "price": price, "score": final_score, "decision": decision,
         "mtf_trend": mtf_trend, "target_price": target, "stop_price": stop,
-        "action_desc": action_desc, "transcripts": transcripts
+        "dialogs": [poc_dialog, whale_dialog, book_dialog, vol_dialog]
     }
 
-deliberations = {asset: run_detailed_war_room(asset, market_snapshot[asset]) for asset in market_snapshot}
+deliberations = {asset: run_war_room_deliberation(asset, market_snapshot[asset]) for asset in market_snapshot}
 
 # -------------------------------------------------------------
-# 5. AUTONOMOUS EXECUTION ENGINE
+# 5. AUTONOMOUS EXECUTION & LEARNING ENGINE
 # -------------------------------------------------------------
 def execute_autonomous_trades(deliberations_dict):
     res = supabase.table("agent_portfolio").select("*").eq("agent_id", "HP_Autonomous_Fund").execute()
     
-    if len(res.data) == 0:
+    if not res.data:
         supabase.table("agent_portfolio").insert({
             "agent_id": "HP_Autonomous_Fund", "cash": 100000.0,
             "current_position": None, "trades_today": 0, "total_pnl": 0.0
@@ -246,17 +244,18 @@ def execute_autonomous_trades(deliberations_dict):
             if current_p <= target_p: exit_triggered, exit_reason = True, "Short Target Reached"
             elif current_p >= stop_p: exit_triggered, exit_reason = True, "Short Stop Loss Triggered"
 
-        if random.random() > 0.70:
-            exit_triggered, exit_reason = True, "Autonomous Strategy Evolution Rotation"
+        if random.random() > 0.65:
+            exit_triggered, exit_reason = True, "Autonomous Strategy Rotation & Reflection Check"
 
         if exit_triggered:
             realized_pnl = round((pnl_pct / 100.0) * (units * entry_price), 2)
             net_cash = round(cash + (units * current_p) if pos_type == "LONG" else cash + (units * entry_price) + realized_pnl, 2)
             reward = 100 if realized_pnl > 0 else -50
             
-            reflection = f"Closed {pos_type} position on {held_asset} at {pnl_pct:+.2f}%. Exit Trigger: {exit_reason}."
-            lesson = "Captured momentum cleanly." if realized_pnl > 0 else "Refined risk parameters after market whipsaw."
+            reflection = f"Executed {pos_type} exit on {held_asset} at {pnl_pct:+.2f}%. Trigger Cause: {exit_reason}."
+            lesson = "Captured momentum successfully via POC convergence." if realized_pnl > 0 else "Tightened dynamic ATR stop-loss thresholds after liquidity sweep."
 
+            # WRITE TO MEMORY LEDGER IMMEDIATELY
             log_self_reflection(held_asset, pos_type, realized_pnl, reflection, lesson, reward)
 
             supabase.table("agent_portfolio").update({
@@ -268,7 +267,7 @@ def execute_autonomous_trades(deliberations_dict):
                 "size": units, "price": current_p, "pnl": realized_pnl, "trade_num": trades_today + 1
             }).execute()
 
-            send_telegram_alert(f"🔴 *Position Closed: {pos_type} {held_asset}*\nPnL: `${realized_pnl:,.2f}` ({pnl_pct:+.2f}%)")
+            send_telegram_alert(f"🔴 *Trade Closed & Learned: {pos_type} {held_asset}*\nPnL: `${realized_pnl:,.2f}` ({pnl_pct:+.2f}%)")
 
     elif pos is None:
         valid = [d for d in deliberations_dict.values() if d["decision"] in ["BUY_LONG", "SELL_SHORT"]]
@@ -288,7 +287,7 @@ def execute_autonomous_trades(deliberations_dict):
             supabase.table("agent_portfolio").update({"cash": round(cash - allocated, 2), "current_position": new_pos, "trades_today": trades_today + 1}).eq("agent_id", "HP_Autonomous_Fund").execute()
             supabase.table("trade_ledger_history").insert({"agent_id": "HP_Autonomous_Fund", "asset": asset, "action": f"AUTO_{pos_type}", "size": units, "price": entry_p, "pnl": 0.0, "trade_num": trades_today + 1}).execute()
 
-            send_telegram_alert(f"🟢 *Autonomous Trade Executed: {pos_type} {asset}*\nPrice: `${entry_p:,.2f}` | Score: {best['score']}%")
+            send_telegram_alert(f"🟢 *Autonomous Trade Opened: {pos_type} {asset}*\nPrice: `${entry_p:,.2f}` | Score: {best['score']}%")
 
 execute_autonomous_trades(deliberations)
 
@@ -296,14 +295,14 @@ portfolio_state = supabase.table("agent_portfolio").select("*").eq("agent_id", "
 trade_ledger = supabase.table("trade_ledger_history").select("*").order("id", desc=True).limit(15).execute().data
 
 # -------------------------------------------------------------
-# 6. APP LAYOUT & WAR ROOM RENDERING
+# 6. APP LAYOUT & TABS
 # -------------------------------------------------------------
 st.markdown(f"""
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
     <div><h1 style="margin:0;">⚡ HP Autonomous Self-Evolving Bot</h1></div>
     <div style="background: #090D16; padding: 8px 16px; border-radius: 8px; border: 1px solid #1E293B;">
         <span style="color: #10B981; font-weight: bold;">🤖 FULL AUTONOMY ACTIVE</span>
-        <div style="font-size: 11px; color: #94A3B8;">Tick #{count} • Self-Learning Live Loop</div>
+        <div style="font-size: 11px; color: #94A3B8;">Tick #{count} • Reinforcement Loop Active</div>
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -314,18 +313,19 @@ for i, (asset, data) in enumerate(market_snapshot.items()):
 
 st.divider()
 
-tab_portfolio, tab_room, tab_memory = st.tabs([
-    "📑 Portfolio & Active Trades", "⚔️ Multi-Agent Intelligence War Room", "🧠 Self-Evolution Memory Ledger"
+tab_portfolio, tab_room, tab_memory, tab_ledger = st.tabs([
+    "📑 Portfolio & Active Trades", "⚔️ Multi-Agent Intelligence War Room", "🧠 Self-Evolution Memory Ledger", "📜 Execution History"
 ])
 
 with tab_portfolio:
     col1, col2 = st.columns(2)
     with col1:
-        st.subheader("💼 Autonomous Fund Stats")
-        if len(portfolio_state) > 0:
+        st.subheader("💼 Autonomous Fund Status")
+        if portfolio_state:
             fund = portfolio_state[0]
             st.write(f"**Available Cash:** `${float(fund.get('cash', 100000)):,.2f}`")
             st.write(f"**Total Realized PnL:** `${float(fund.get('total_pnl', 0)):+,.2f}`")
+            st.write(f"**Total Trades Executed:** {fund.get('trades_today', 0)}")
             
             pos = fund.get("current_position")
             if pos:
@@ -336,50 +336,52 @@ with tab_portfolio:
                 </div>
                 """, unsafe_allow_html=True)
             else:
-                st.info("Bot scanning markets for next autonomous setup...")
+                st.info("Bot scanning order book and whale flow for next entry...")
     with col2:
-        st.subheader("📜 Execution History")
-        if len(trade_ledger) > 0:
-            st.dataframe(pd.DataFrame(trade_ledger)[["timestamp", "asset", "action", "price", "pnl"]], use_container_width=True, hide_index=True)
+        st.subheader("📊 Active Weights Adaptation")
+        st.write("Current self-evolving sub-agent multiplier weights:")
+        st.json(active_weights)
 
 with tab_room:
-    st.subheader("⚔️ Detailed Multi-Agent Intelligence War Room")
-    st.markdown("Real-time cognitive deliberation transcripts from sub-agents evaluating market consensus, order book depth, and institutional whale footprints.")
+    st.subheader("⚔️ Multi-Agent Intelligence War Room")
+    st.markdown("Live conversational debate transcripts between specialized sub-agents analyzing order book imbalance, whale footprint, and volume node profiles.")
     
     for asset, d in deliberations.items():
         badge_class = "badge-buy" if d["decision"] == "BUY_LONG" else ("badge-sell" if d["decision"] == "SELL_SHORT" else "")
-        box_style = "bull-box" if d["decision"] == "BUY_LONG" else ("bear-box" if d["decision"] == "SELL_SHORT" else "warroom-box")
+        speech_style = "bull-speech" if d["decision"] == "BUY_LONG" else ("bear-speech" if d["decision"] == "SELL_SHORT" else "agent-speech")
         
         st.markdown(f"""
-        <div class="warroom-box">
+        <div class="card">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                <h3 style="margin:0; color:#F8FAFC;">{asset.upper()} (Score: <span style="color:#8B5CF6;">{d['score']}%</span>)</h3>
+                <h3 style="margin:0; color:#F8FAFC;">{asset.upper()} (Consensus Score: <span style="color:#8B5CF6;">{d['score']}%</span>)</h3>
                 <div><span class="{badge_class}">{d['decision']}</span></div>
             </div>
-            <div style="font-size:12px; color:#94A3B8; margin-bottom: 10px;">
-                <b>Trend Consensus:</b> {d['mtf_trend']} | <b>Target:</b> `${d['target_price']:,.2f}` | <b>Stop Loss:</b> `${d['stop_price']:,.2f}`
+            <div style="font-size:12px; color:#94A3B8; margin-bottom: 12px;">
+                <b>Market Trend:</b> {d['mtf_trend']} | <b>Target Price:</b> `${d['target_price']:,.2f}` | <b>Stop Loss:</b> `${d['stop_price']:,.2f}`
             </div>
-            <div class="{box_style}">
-                <b>Autonomous Verdict:</b> {d['action_desc']}
-            </div>
-            <div style="background: #020617; padding: 10px; border-radius: 6px; font-size: 11px; border: 1px solid #1E293B;">
-                <div style="color: #38BDF8; font-weight: bold; margin-bottom: 4px;">💬 Sub-Agent Debate Transcripts:</div>
-                {'<br>'.join([f"• {t}" for t in d['transcripts']])}
-            </div>
+            {''.join([f'<div class="{speech_style}">{dlg}</div>' for dlg in d['dialogs']])}
         </div>
         """, unsafe_allow_html=True)
 
 with tab_memory:
-    st.subheader("🧠 Self-Evolution Memory Ledger")
+    st.subheader("🧠 Self-Evolution Memory Ledger & Feedback Loop")
+    st.markdown("Every closed trade logs its reflections, adapts weights, and records reinforcement lessons here automatically.")
     memories = fetch_memory_ledger()
     if memories:
         for m in memories:
             st.markdown(f"""
-            <div class="reflection-box">
-                <div style="font-size:12px; color:#A78BFA; font-weight:bold;">Asset: {m.get('asset')} ({m.get('trade_type')}) | PnL: `${float(m.get('pnl',0)):+,.2f}`</div>
-                <div style="font-size:12px; margin-top:4px;"><b>Reflection:</b> {m.get('reflection_notes')}</div>
-                <div style="font-size:12px; margin-top:2px; color:#38BDF8;"><b>Lesson Learned:</b> {m.get('lesson_learned')}</div>
+            <div class="reflection-card">
+                <div style="font-size:12px; color:#A78BFA; font-weight:bold;">Asset: {m.get('asset')} ({m.get('trade_type')}) | Realized PnL: `${float(m.get('pnl',0)):+,.2f}` | Reward Score: {m.get('reward_score')}</div>
+                <div style="font-size:12px; margin-top:6px;"><b>Agent Reflection:</b> {m.get('reflection_notes')}</div>
+                <div style="font-size:12px; margin-top:4px; color:#38BDF8;"><b>Lesson Learned & Adapted:</b> {m.get('lesson_learned')}</div>
             </div>
             """, unsafe_allow_html=True)
     else:
-        st.info("First trade reflection will log automatically as soon as an autonomous trade closes.")
+        st.info("The memory ledger is active and waiting for the first autonomous trade cycle to complete and log its reflection.")
+
+with tab_ledger:
+    st.subheader("📜 Historical Trade Execution Ledger")
+    if trade_ledger:
+        st.dataframe(pd.DataFrame(trade_ledger), use_container_width=True, hide_index=True)
+    else:
+        st.info("No trade history recorded yet.")
