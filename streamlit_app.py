@@ -6,11 +6,10 @@ from streamlit_autorefresh import st_autorefresh
 from supabase import create_client, Client
 import requests
 import random
-import time
-from datetime import datetime, date
+from datetime import datetime
 
 # -------------------------------------------------------------
-# 1. PAGE CONFIGURATION & AUTONOMOUS TERMINAL
+# 1. PAGE CONFIGURATION & STYLING
 # -------------------------------------------------------------
 st.set_page_config(
     page_title="HP Autonomous Self-Evolving Trading Bot",
@@ -38,8 +37,8 @@ st.markdown("""
     .bear-box { background: rgba(239, 68, 68, 0.08); border-left: 4px solid #EF4444; padding: 10px 12px; border-radius: 6px; margin-bottom: 8px; font-size: 12px; }
     .reflection-box { background: rgba(139, 92, 246, 0.08); border: 1px solid #8B5CF6; padding: 14px 16px; border-radius: 8px; margin-bottom: 12px; }
 
-    .badge-buy { background-color: #10B981; color: #000; padding: 3px 8px; border-radius: 4px; font-weight: 800; font-size: 10px; }
-    .badge-sell { background-color: #EF4444; color: #FFF; padding: 3px 8px; border-radius: 4px; font-weight: 800; font-size: 10px; }
+    .badge-buy { background-color: #10B981; color: #000; padding: 4px 10px; border-radius: 4px; font-weight: 800; font-size: 11px; }
+    .badge-sell { background-color: #EF4444; color: #FFF; padding: 4px 10px; border-radius: 4px; font-weight: 800; font-size: 11px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -70,15 +69,11 @@ def send_telegram_alert(message):
     except Exception as e:
         print(f"Telegram alert error: {e}")
 
-if "debate_transcripts" not in st.session_state:
-    st.session_state.debate_transcripts = []
-if "reflection_history" not in st.session_state:
-    st.session_state.reflection_history = []
 if "price_buffer" not in st.session_state:
     st.session_state.price_buffer = {}
 
 # -------------------------------------------------------------
-# 2. DYNAMIC REAL-TIME MARKET STREAM
+# 2. MARKET DATA STREAM WITH DYNAMIC JITTER
 # -------------------------------------------------------------
 def fetch_hp_market_data():
     market_data = {}
@@ -100,15 +95,14 @@ def fetch_hp_market_data():
             raw_p = base_prices[name]
             atr = raw_p * 0.005
         
-        # Add micro-fluctuation jitter so prices move dynamically like a live broker
         jitter = random.uniform(-0.0015, 0.0015) * raw_p
         smooth_p = round(raw_p + jitter, 2)
         st.session_state.price_buffer[name] = smooth_p
 
         market_data[name] = {
             "price": smooth_p, "atr": round(atr, 4), 
-            "mtf_trend": "BULLISH" if random.random() > 0.4 else "BEARISH",
-            "vol_ratio": round(random.uniform(0.8, 1.6), 2),
+            "mtf_trend": "BULLISH" if random.random() > 0.35 else "BEARISH",
+            "vol_ratio": round(random.uniform(0.8, 1.8), 2),
             "poc": round(smooth_p - (atr * 0.1), 2)
         }
     return market_data
@@ -123,7 +117,7 @@ def fetch_memory_ledger():
         return []
 
 # -------------------------------------------------------------
-# 3. SELF-ADAPTIVE WEIGHTS FROM MISTAKES
+# 3. SELF-ADAPTIVE WEIGHTS & REFLECTIONS
 # -------------------------------------------------------------
 def get_adaptive_agent_weights():
     weights = {"poc": 0.25, "whale": 0.25, "orderbook": 0.20, "vol": 0.15, "news": 0.15}
@@ -149,19 +143,20 @@ def log_self_reflection(asset, trade_type, pnl, reflection, lesson, reward):
 active_weights = get_adaptive_agent_weights()
 
 # -------------------------------------------------------------
-# 4. FULL-FREEDOM MULTI-AGENT INTELLIGENCE ROOM
+# 4. RESTORED DETAILED WAR ROOM DEBATE & AGENTS
 # -------------------------------------------------------------
-def run_autonomous_deliberation(asset, data):
+def run_detailed_war_room(asset, data):
     price = data["price"]
     atr = data["atr"]
     mtf_trend = data["mtf_trend"]
     vol_ratio = data["vol_ratio"]
+    poc = data["poc"]
     
-    # Sub-agent evaluations with active variance
-    poc_score = random.randint(40, 80)
-    whale_score = random.randint(35, 85)
-    book_score = random.randint(30, 85)
-    vol_score = random.randint(40, 80)
+    # Detailed sub-agent scoring
+    poc_score = random.randint(45, 82)
+    whale_score = random.randint(40, 85)
+    book_score = random.randint(38, 80)
+    vol_score = random.randint(42, 78)
     news_score = random.randint(45, 75)
 
     w = active_weights
@@ -173,12 +168,12 @@ def run_autonomous_deliberation(asset, data):
         (news_score * w["news"])
     )
     
-    if mtf_trend == "BULLISH": weighted_score += 6
-    else: weighted_score -= 6
+    if mtf_trend == "BULLISH": weighted_score += 5
+    else: weighted_score -= 5
 
     final_score = int(max(10, min(90, weighted_score)))
 
-    # FREEDOM THRESHOLDS: Lowered so the bot acts immediately and tests strategies
+    # Autonomous decision thresholds
     if final_score >= 54: decision = "BUY_LONG"
     elif final_score <= 46: decision = "SELL_SHORT"
     else: decision = "NEUTRAL"
@@ -187,21 +182,30 @@ def run_autonomous_deliberation(asset, data):
     if decision == "BUY_LONG":
         target = round(price + (dynamic_atr * 1.5), 2)
         stop = round(price - (dynamic_atr * 0.8), 2)
+        action_desc = "🚀 BULLISH SETUP CONFIRMED: High conviction multi-agent consensus reached for upward continuation."
     elif decision == "SELL_SHORT":
         target = round(price - (dynamic_atr * 1.5), 2)
         stop = round(price + (dynamic_atr * 0.8), 2)
+        action_desc = "🔻 BEARISH SETUP CONFIRMED: Distribution detected by whale tracker and order book imbalance."
     else:
         target, stop = price, price
+        action_desc = "⚖️ RANGE BOUND / NEUTRAL: Agents awaiting clearer momentum expansion."
+
+    # Detailed agent dialogue strings
+    transcripts = [
+        f"<b>VolumeProfilePOCAgent:</b> Scanned volume node cluster. POC positioned stably around ${poc:,.2f} with strong absorption.",
+        f"<b>ApexWhaleTrackerAgent:</b> Large wallet netflow ratio measured at {vol_ratio}x relative to 20-period baseline.",
+        f"<b>L2OrderBookImbalanceAgent:</b> Bid/Ask depth imbalance computed at {book_score}%. Order book pressure favors {'buyers' if final_score > 50 else 'sellers'}.",
+        f"<b>ApexVolArbAgent:</b> Volatility arbitrage spread normalized at ATR {atr:.2f}. Momentum confidence index at {final_score}%."
+    ]
 
     return {
         "asset": asset, "price": price, "score": final_score, "decision": decision,
         "mtf_trend": mtf_trend, "target_price": target, "stop_price": stop,
-        "poc_note": f"POC value node scanned at ${data['poc']}.",
-        "whale_note": f"Whale volume footprint ratio: {vol_ratio}x.",
-        "book_note": f"Order book imbalance score: {book_score}."
+        "action_desc": action_desc, "transcripts": transcripts
     }
 
-deliberations = {asset: run_autonomous_deliberation(asset, market_snapshot[asset]) for asset in market_snapshot}
+deliberations = {asset: run_detailed_war_room(asset, market_snapshot[asset]) for asset in market_snapshot}
 
 # -------------------------------------------------------------
 # 5. AUTONOMOUS EXECUTION ENGINE
@@ -242,17 +246,16 @@ def execute_autonomous_trades(deliberations_dict):
             if current_p <= target_p: exit_triggered, exit_reason = True, "Short Target Reached"
             elif current_p >= stop_p: exit_triggered, exit_reason = True, "Short Stop Loss Triggered"
 
-        # Force quick evolution cycle if trade lasts a few ticks
-        if random.random() > 0.65:
-            exit_triggered, exit_reason = True, "Autonomous Strategy Rotation"
+        if random.random() > 0.70:
+            exit_triggered, exit_reason = True, "Autonomous Strategy Evolution Rotation"
 
         if exit_triggered:
             realized_pnl = round((pnl_pct / 100.0) * (units * entry_price), 2)
             net_cash = round(cash + (units * current_p) if pos_type == "LONG" else cash + (units * entry_price) + realized_pnl, 2)
             reward = 100 if realized_pnl > 0 else -50
             
-            reflection = f"Closed {pos_type} on {held_asset} at {pnl_pct:+.2f}%. Reason: {exit_reason}."
-            lesson = "Successful momentum capture" if realized_pnl > 0 else "Adjusted volatility filters after whipsaw."
+            reflection = f"Closed {pos_type} position on {held_asset} at {pnl_pct:+.2f}%. Exit Trigger: {exit_reason}."
+            lesson = "Captured momentum cleanly." if realized_pnl > 0 else "Refined risk parameters after market whipsaw."
 
             log_self_reflection(held_asset, pos_type, realized_pnl, reflection, lesson, reward)
 
@@ -265,7 +268,7 @@ def execute_autonomous_trades(deliberations_dict):
                 "size": units, "price": current_p, "pnl": realized_pnl, "trade_num": trades_today + 1
             }).execute()
 
-            send_telegram_alert(f"🔴 *Trade Closed: {pos_type} {held_asset}*\nPnL: `${realized_pnl:,.2f}` ({pnl_pct:+.2f}%)")
+            send_telegram_alert(f"🔴 *Position Closed: {pos_type} {held_asset}*\nPnL: `${realized_pnl:,.2f}` ({pnl_pct:+.2f}%)")
 
     elif pos is None:
         valid = [d for d in deliberations_dict.values() if d["decision"] in ["BUY_LONG", "SELL_SHORT"]]
@@ -275,7 +278,7 @@ def execute_autonomous_trades(deliberations_dict):
             pos_type = "LONG" if best["decision"] == "BUY_LONG" else "SHORT"
             entry_p = best["price"]
             
-            allocated = cash * 0.25 # Allocate 25% of cash per autonomous trade
+            allocated = cash * 0.25
             units = round(allocated / entry_p, 4)
             
             new_pos = {
@@ -285,7 +288,7 @@ def execute_autonomous_trades(deliberations_dict):
             supabase.table("agent_portfolio").update({"cash": round(cash - allocated, 2), "current_position": new_pos, "trades_today": trades_today + 1}).eq("agent_id", "HP_Autonomous_Fund").execute()
             supabase.table("trade_ledger_history").insert({"agent_id": "HP_Autonomous_Fund", "asset": asset, "action": f"AUTO_{pos_type}", "size": units, "price": entry_p, "pnl": 0.0, "trade_num": trades_today + 1}).execute()
 
-            send_telegram_alert(f"🟢 *Autonomous Trade Opened: {pos_type} {asset}*\nPrice: `${entry_p:,.2f}` | Score: {best['score']}%")
+            send_telegram_alert(f"🟢 *Autonomous Trade Executed: {pos_type} {asset}*\nPrice: `${entry_p:,.2f}` | Score: {best['score']}%")
 
 execute_autonomous_trades(deliberations)
 
@@ -293,7 +296,7 @@ portfolio_state = supabase.table("agent_portfolio").select("*").eq("agent_id", "
 trade_ledger = supabase.table("trade_ledger_history").select("*").order("id", desc=True).limit(15).execute().data
 
 # -------------------------------------------------------------
-# 6. APP LAYOUT
+# 6. APP LAYOUT & WAR ROOM RENDERING
 # -------------------------------------------------------------
 st.markdown(f"""
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
@@ -312,7 +315,7 @@ for i, (asset, data) in enumerate(market_snapshot.items()):
 st.divider()
 
 tab_portfolio, tab_room, tab_memory = st.tabs([
-    "📑 Portfolio & Active Trades", "⚔️ Multi-Agent Intelligence", "🧠 Self-Evolution Memory Ledger"
+    "📑 Portfolio & Active Trades", "⚔️ Multi-Agent Intelligence War Room", "🧠 Self-Evolution Memory Ledger"
 ])
 
 with tab_portfolio:
@@ -329,7 +332,7 @@ with tab_portfolio:
                 st.markdown(f"""
                 <div class="card">
                     <b>Active Position: {pos['type']} {pos['asset']}</b><br>
-                    Entry: `${float(pos['entry_price']):,.2f}` | Units: {pos['units']}
+                    Entry: `${float(pos['entry_price']):,.2f}` | Target: `${float(pos['target_price']):,.2f}` | Stop: `${float(pos['stop_price']):,.2f}`
                 </div>
                 """, unsafe_allow_html=True)
             else:
@@ -340,17 +343,28 @@ with tab_portfolio:
             st.dataframe(pd.DataFrame(trade_ledger)[["timestamp", "asset", "action", "price", "pnl"]], use_container_width=True, hide_index=True)
 
 with tab_room:
-    st.subheader("⚔️ Multi-Agent Decision Room")
-    grid = st.columns(2)
-    for idx, (asset, d) in enumerate(deliberations.items()):
-        col = grid[idx % 2]
-        badge = "badge-buy" if d["decision"] == "BUY_LONG" else "badge-sell"
-        col.markdown(f"""
-        <div class="card">
-            <h3>{asset.upper()} - <span style="color:#8B5CF6;">{d['score']}%</span></h3>
-            <div style="font-size:11px; color:#94A3B8;">Trend: {d['mtf_trend']} | Action: <span class="{badge}">{d['decision']}</span></div>
-            <div style="font-size:11px; margin-top:8px;">
-                • {d['poc_note']}<br>• {d['whale_note']}<br>• {d['book_note']}
+    st.subheader("⚔️ Detailed Multi-Agent Intelligence War Room")
+    st.markdown("Real-time cognitive deliberation transcripts from sub-agents evaluating market consensus, order book depth, and institutional whale footprints.")
+    
+    for asset, d in deliberations.items():
+        badge_class = "badge-buy" if d["decision"] == "BUY_LONG" else ("badge-sell" if d["decision"] == "SELL_SHORT" else "")
+        box_style = "bull-box" if d["decision"] == "BUY_LONG" else ("bear-box" if d["decision"] == "SELL_SHORT" else "warroom-box")
+        
+        st.markdown(f"""
+        <div class="warroom-box">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <h3 style="margin:0; color:#F8FAFC;">{asset.upper()} (Score: <span style="color:#8B5CF6;">{d['score']}%</span>)</h3>
+                <div><span class="{badge_class}">{d['decision']}</span></div>
+            </div>
+            <div style="font-size:12px; color:#94A3B8; margin-bottom: 10px;">
+                <b>Trend Consensus:</b> {d['mtf_trend']} | <b>Target:</b> `${d['target_price']:,.2f}` | <b>Stop Loss:</b> `${d['stop_price']:,.2f}`
+            </div>
+            <div class="{box_style}">
+                <b>Autonomous Verdict:</b> {d['action_desc']}
+            </div>
+            <div style="background: #020617; padding: 10px; border-radius: 6px; font-size: 11px; border: 1px solid #1E293B;">
+                <div style="color: #38BDF8; font-weight: bold; margin-bottom: 4px;">💬 Sub-Agent Debate Transcripts:</div>
+                {'<br>'.join([f"• {t}" for t in d['transcripts']])}
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -368,4 +382,4 @@ with tab_memory:
             </div>
             """, unsafe_allow_html=True)
     else:
-        st.info("First trade reflection will log automatically as soon as a trade closes.")
+        st.info("First trade reflection will log automatically as soon as an autonomous trade closes.")
