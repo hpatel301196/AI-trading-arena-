@@ -256,8 +256,8 @@ def execute_professional_engine(deliberations_dict):
         
         if current_data["active"] and entry_price > 0:
             current_p = current_data["price"]
-            target_p = float(pos.get("target_price", entry_p * 1.02))
-            stop_p = float(pos.get("stop_price", entry_p * 0.98))
+            target_p = float(pos.get("target_price", entry_price * 1.02))
+            stop_p = float(pos.get("stop_price", entry_price * 0.98))
             
             pnl_pct = ((current_p - entry_price) / entry_price) * 100.0 if pos_type == "LONG" else ((entry_price - current_p) / entry_price) * 100.0
 
@@ -329,7 +329,7 @@ st.markdown(f"""
     <div><h1 style="margin:0;">⚡ HP Institutional Autonomous Engine</h1></div>
     <div style="background: #090D16; padding: 8px 16px; border-radius: 8px; border: 1px solid #1E293B;">
         <span style="color: #10B981; font-weight: bold;">🏛️ PRODUCTION GRADE ACTIVE</span>
-        <div style="font-size: 11px; color: #94A3B8;">Tick #{count} • Full Agent Suite & Safe Schema Fallbacks</div>
+        <div style="font-size: 11px; color: #94A3B8;">Tick #{count} • Full Agent Suite & Fully Safe Lookups</div>
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -363,8 +363,8 @@ with tab_portfolio:
                 pnl_pct = ((curr_p - entry_p) / entry_p) * 100.0 if pos.get('type', 'LONG') == "LONG" and entry_p > 0 else 0.0
                 pnl_color = "#10B981" if pnl_pct >= 0 else "#EF4444"
 
-                target_val = float(pos.get('target_price', entry_p * 1.02))
-                stop_val = float(pos.get('stop_price', entry_p * 0.98))
+                target_val = float(pos.get('target_price', entry_p * 1.02 if entry_p > 0 else 0))
+                stop_val = float(pos.get('stop_price', entry_p * 0.98 if entry_p > 0 else 0))
 
                 st.markdown(f"""
                 <div class="card" style="border-color: #38BDF8;">
