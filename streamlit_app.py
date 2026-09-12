@@ -140,7 +140,7 @@ def get_adaptive_agent_weights():
             weights["orderbook"] = 0.30
             weights["whale"] = 0.25
             weights["vol"] = 0.20
-            weights["poc": 0.15] # handled properly
+            weights["poc"] = 0.15
             weights["news"] = 0.10
     return weights
 
@@ -161,7 +161,7 @@ def log_self_reflection(asset, trade_type, pnl, reflection, lesson, reward):
 active_weights = get_adaptive_agent_weights()
 
 # -------------------------------------------------------------
-# 4. RESTORED FULL MULTI-AGENT WAR ROOM DELIBERATION
+# 4. FULL MULTI-AGENT WAR ROOM DELIBERATION
 # -------------------------------------------------------------
 def run_professional_war_room(asset, data):
     if not data["active"]:
@@ -177,14 +177,12 @@ def run_professional_war_room(asset, data):
     poc = data["poc"]
     vol_surge = data["volume_surge"]
 
-    # Full suite of specialized agent scoring algorithms
     poc_score = 68 if price > poc else 42
     whale_score = 72 if mtf_trend == "BULLISH" else 35
     book_score = 60 if atr > (price * 0.001) else 45
     vol_score = 65 if vol_surge else 50
     news_score = 58
 
-    w = active_weights
     weighted_score = (
         (poc_score * 0.25) + 
         (whale_score * 0.25) + 
@@ -212,7 +210,6 @@ def run_professional_war_room(asset, data):
     else:
         target, stop = price, price
 
-    # Detailed agent commentary matching your previous professional setup
     dialogs = [
         f"<b>ApexWhaleTrackerAgent (Score {whale_score}):</b> Large block order flow analysis detects heavy institutional accumulation near support levels.",
         f"<b>VolumeProfilePOCAgent (Score {poc_score}):</b> Value Area Point of Control verified at ${poc:,.2f}. Structural control favors {'buyers' if price > poc else 'sellers'}.",
@@ -235,7 +232,7 @@ def execute_professional_engine(deliberations_dict):
     res = supabase.table("agent_portfolio").select("*").limit(1).execute()
     
     if not res.data:
-        agent_id = "HP_Institutional_Fund"
+        agent_id = "Umbrella_Main_Fund"
         supabase.table("agent_portfolio").insert({
             "agent_id": agent_id, "cash": 100000.0,
             "current_position": None, "trades_today": 0, "total_pnl": 0.0
@@ -243,24 +240,24 @@ def execute_professional_engine(deliberations_dict):
         fund = {"agent_id": agent_id, "cash": 100000.0, "current_position": None, "trades_today": 0, "total_pnl": 0.0}
     else:
         fund = res.data[0]
-        agent_id = fund.get("agent_id", "HP_Institutional_Fund")
+        agent_id = fund.get("agent_id", "Umbrella_Main_Fund")
 
     cash = float(fund.get("cash", 100000.0))
     pos = fund.get("current_position")
     trades_today = fund.get("trades_today", 0)
     total_pnl = float(fund.get("total_pnl", 0.0))
 
-    if pos is not None:
-        held_asset = pos["asset"]
-        entry_price = float(pos["entry_price"])
+    if pos is not None and isinstance(pos, dict):
+        held_asset = pos.get("asset", "Unknown")
+        entry_price = float(pos.get("entry_price", 0.0))
         pos_type = pos.get("type", "LONG")
-        units = float(pos["units"])
+        units = float(pos.get("units", 0.0))
         current_data = market_snapshot.get(held_asset, {"price": entry_price, "active": False})
         
-        if current_data["active"]:
+        if current_data["active"] and entry_price > 0:
             current_p = current_data["price"]
-            target_p = float(pos["target_price"])
-            stop_p = float(pos["stop_price"])
+            target_p = float(pos.get("target_price", entry_p * 1.02))
+            stop_p = float(pos.get("stop_price", entry_p * 0.98))
             
             pnl_pct = ((current_p - entry_price) / entry_price) * 100.0 if pos_type == "LONG" else ((entry_price - current_p) / entry_price) * 100.0
 
@@ -332,7 +329,7 @@ st.markdown(f"""
     <div><h1 style="margin:0;">⚡ HP Institutional Autonomous Engine</h1></div>
     <div style="background: #090D16; padding: 8px 16px; border-radius: 8px; border: 1px solid #1E293B;">
         <span style="color: #10B981; font-weight: bold;">🏛️ PRODUCTION GRADE ACTIVE</span>
-        <div style="font-size: 11px; color: #94A3B8;">Tick #{count} • Full Agent Suite & Live PnL Active</div>
+        <div style="font-size: 11px; color: #94A3B8;">Tick #{count} • Full Agent Suite & Safe Schema Fallbacks</div>
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -359,19 +356,22 @@ with tab_portfolio:
             st.write(f"**Total Realized PnL:** `${float(fund.get('total_pnl', 0)):+,.2f}`")
             
             pos = fund.get("current_position")
-            if pos:
-                held_asset = pos["asset"]
-                entry_p = float(pos["entry_price"])
+            if pos and isinstance(pos, dict):
+                held_asset = pos.get("asset", "Unknown")
+                entry_p = float(pos.get("entry_price", 0.0))
                 curr_p = market_snapshot.get(held_asset, {}).get("price", entry_p)
-                pnl_pct = ((curr_p - entry_p) / entry_p) * 100.0 if pos['type'] == "LONG" else ((entry_p - curr_p) / entry_p) * 100.0
+                pnl_pct = ((curr_p - entry_p) / entry_p) * 100.0 if pos.get('type', 'LONG') == "LONG" and entry_p > 0 else 0.0
                 pnl_color = "#10B981" if pnl_pct >= 0 else "#EF4444"
+
+                target_val = float(pos.get('target_price', entry_p * 1.02))
+                stop_val = float(pos.get('stop_price', entry_p * 0.98))
 
                 st.markdown(f"""
                 <div class="card" style="border-color: #38BDF8;">
-                    <b>Active Managed Position: {pos['type']} {held_asset}</b><br>
+                    <b>Active Managed Position: {pos.get('type', 'LONG')} {held_asset}</b><br>
                     Entry Price: `${entry_p:,.2f}` | Current Price: `${curr_p:,.2f}`<br>
                     <b>Live Unrealized PnL: <span style="color: {pnl_color};">{pnl_pct:+,.2f}%</span></b><br>
-                    Target: `${float(pos['target_price']):,.2f}` | Stop: `${float(pos['stop_price']):,.2f}`
+                    Target: `${target_val:,.2f}` | Stop: `${stop_val:,.2f}`
                 </div>
                 """, unsafe_allow_html=True)
             else:
